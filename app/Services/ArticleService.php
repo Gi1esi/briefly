@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Article;
+use App\Models\Tag;
+use DOMDocument;
 use Illuminate\Support\Facades\Http;
 
 class ArticleService
@@ -35,23 +37,25 @@ class ArticleService
 
                 $title = (string) $item->title;
                 $source_url  = (string) $item->link;
-                $description = cleanHtml($item->description);
+                $description = $this->cleanHtml($item->description);
 //                $content = $this->getFullArticle($source_url);
-                $summary_response = $this->summarizeArticle($source_url);
-                $summary_data = json_decode($summary_response, true);
-                $summary = $summary_data[0];
+                $summary = $this->summarizeArticle($source_url);
 
-                $tags = json_decode($summary_data[1], true);
 
-                dd($summary, $tags);
-
-                Article::create([
+                $article = Article::create([
                     'title' => $title,
                     'summary' => $summary,
                     'date' => $pubDate,
                     'source'=> $siteTitle,
                     'source_url' => $source_url,
                 ]);
+
+                $tags_data = $this->tagArticle($summary);
+                $tags = json_decode($tags_data, true);
+                $tagIds = Tag::whereIn('name', $tags)->pluck('id')->toArray();
+                $article->tags()->sync($tagIds);
+
+
 
             }
         }
@@ -85,4 +89,48 @@ class ArticleService
         }
 
     }
+
+    private function tagArticle($summary)
+    {
+        $maxRetries = 1;
+        $attempt = 0;
+        $default_tags = ['Politics'];
+
+        while ($attempt <= $maxRetries) {
+            try {
+                $response = Http::timeout(10)->get('http://127.0.0.1:8000/tag', [
+                    'summary' => $summary,
+                ]);
+
+                if ($response->successful()) {
+                    return $response->body();
+                }
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $attempt++;
+                if ($attempt > $maxRetries) {
+                    logger()->warning("Failed to tag summary: {$e->getMessage()}");
+
+                    return $default_tags;
+                }
+            }
+        }
+    }
+
+
+    function cleanHtml($html): false|string
+    {
+        $doc = new DOMDocument();
+        @$doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+        $body = $doc->getElementsByTagName('body')->item(0);
+
+        foreach (iterator_to_array($body->childNodes) as $node) {
+            $text = $node->textContent;
+            if (stripos($text, "The post") !== false || stripos($text, "appeared first on") !== false) {
+                $body->removeChild($node);
+            }
+        }
+
+        return $doc->saveHTML($body);
+    }
+
 }
