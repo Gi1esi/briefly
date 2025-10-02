@@ -37,19 +37,5 @@ Route::get('/feeds', function () {
     dd($items);
 });
 
-function cleanHtml($html): false|string
-{
-    $doc = new DOMDocument();
-    @$doc->loadHTML('<?xml encoding="UTF-8">' . $html);
-    $body = $doc->getElementsByTagName('body')->item(0);
 
-    foreach (iterator_to_array($body->childNodes) as $node) {
-        $text = $node->textContent;
-        if (stripos($text, "The post") !== false || stripos($text, "appeared first on") !== false) {
-            $body->removeChild($node);
-        }
-    }
-
-    return $doc->saveHTML($body);
-}
 

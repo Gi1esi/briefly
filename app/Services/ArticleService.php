@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Models\Article;
+use App\Models\Tag;
+use DOMDocument;
+use Illuminate\Support\Facades\Http;
 
 class ArticleService
 {
@@ -22,23 +25,37 @@ class ArticleService
 
             foreach ($xml->channel->item as $item) {
                 $link = (string) $item->link;
+                $pubDate = $item->pubDate ? date('Y-m-d', strtotime($item->pubDate)) : null;
+                $today = date('Y-m-d');
+                $maxLinkLength = 191;
 
-                if(Article::where('source_url', $link)->exists()) continue;
+                if(Article::where('source_url', $link)->exists() || ($pubDate && $pubDate < $today) || strlen($link) > $maxLinkLength)
+                {
+                    echo("skipping\n");
+                    continue;
+                }
 
                 $title = (string) $item->title;
                 $source_url  = (string) $item->link;
-                $description = cleanHtml($item->description);
-                $pubDate = $item->pubDate ? date('Y-m-d', strtotime($item->pubDate)) : null;
-                $content = $this->getFullArticle($source_url);
-                $summary = $this->summarizeArticle($content);
+                $description = $this->cleanHtml($item->description);
+//                $content = $this->getFullArticle($source_url);
+                $summary = $this->summarizeArticle($source_url);
 
-                Article::create([
+
+                $article = Article::create([
                     'title' => $title,
                     'summary' => $summary,
                     'date' => $pubDate,
                     'source'=> $siteTitle,
                     'source_url' => $source_url,
                 ]);
+
+                $tags_data = $this->tagArticle($summary);
+                $tags = json_decode($tags_data, true);
+                $tagIds = Tag::whereIn('name', $tags)->pluck('id')->toArray();
+                $article->tags()->sync($tagIds);
+
+
 
             }
         }
@@ -48,8 +65,72 @@ class ArticleService
     {
         //
     }
-    private function summarizeArticle(string $content): ?string
+    private function summarizeArticle(string $source_url): ?string
     {
-        //
+        $maxRetries = 1;
+        $attempt = 0;
+
+        while ($attempt <= $maxRetries) {
+            try {
+                $response = Http::timeout(10)->get('http://127.0.0.1:8000/summarize', [
+                    'article_url' => $source_url,
+                ]);
+
+                if ($response->successful()) {
+                    return $response->body();
+                }
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $attempt++;
+                if ($attempt > $maxRetries) {
+                    logger()->warning("Failed to summarize {$source_url}: {$e->getMessage()}");
+                    return 'Failed to get summary';
+                }
+            }
+        }
+
     }
+
+    private function tagArticle($summary)
+    {
+        $maxRetries = 1;
+        $attempt = 0;
+        $default_tags = ['Politics'];
+
+        while ($attempt <= $maxRetries) {
+            try {
+                $response = Http::timeout(10)->get('http://127.0.0.1:8000/tag', [
+                    'summary' => $summary,
+                ]);
+
+                if ($response->successful()) {
+                    return $response->body();
+                }
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $attempt++;
+                if ($attempt > $maxRetries) {
+                    logger()->warning("Failed to tag summary: {$e->getMessage()}");
+
+                    return $default_tags;
+                }
+            }
+        }
+    }
+
+
+    function cleanHtml($html): false|string
+    {
+        $doc = new DOMDocument();
+        @$doc->loadHTML('<?xml encoding="UTF-8">' . $html);
+        $body = $doc->getElementsByTagName('body')->item(0);
+
+        foreach (iterator_to_array($body->childNodes) as $node) {
+            $text = $node->textContent;
+            if (stripos($text, "The post") !== false || stripos($text, "appeared first on") !== false) {
+                $body->removeChild($node);
+            }
+        }
+
+        return $doc->saveHTML($body);
+    }
+
 }

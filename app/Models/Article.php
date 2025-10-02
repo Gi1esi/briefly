@@ -10,10 +10,10 @@ class Article extends Model
 {
     protected $fillable = [
         'title',
+        'summary',
         'date',
         'source',
         'source_url',
-        'reason_to_care',
         'content',
     ];
 
