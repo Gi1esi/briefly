@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Article;
+use Illuminate\Support\Facades\Http;
 
 class ArticleService
 {
@@ -22,15 +23,27 @@ class ArticleService
 
             foreach ($xml->channel->item as $item) {
                 $link = (string) $item->link;
+                $pubDate = $item->pubDate ? date('Y-m-d', strtotime($item->pubDate)) : null;
+                $today = date('Y-m-d');
+                $maxLinkLength = 191;
 
-                if(Article::where('source_url', $link)->exists()) continue;
+                if(Article::where('source_url', $link)->exists() || ($pubDate && $pubDate < $today) || strlen($link) > $maxLinkLength)
+                {
+                    echo("skipping\n");
+                    continue;
+                }
 
                 $title = (string) $item->title;
                 $source_url  = (string) $item->link;
                 $description = cleanHtml($item->description);
-                $pubDate = $item->pubDate ? date('Y-m-d', strtotime($item->pubDate)) : null;
-                $content = $this->getFullArticle($source_url);
-                $summary = $this->summarizeArticle($content);
+//                $content = $this->getFullArticle($source_url);
+                $summary_response = $this->summarizeArticle($source_url);
+                $summary_data = json_decode($summary_response, true);
+                $summary = $summary_data[0];
+
+                $tags = json_decode($summary_data[1], true);
+
+                dd($summary, $tags);
 
                 Article::create([
                     'title' => $title,
@@ -48,8 +61,28 @@ class ArticleService
     {
         //
     }
-    private function summarizeArticle(string $content): ?string
+    private function summarizeArticle(string $source_url): ?string
     {
-        //
+        $maxRetries = 1;
+        $attempt = 0;
+
+        while ($attempt <= $maxRetries) {
+            try {
+                $response = Http::timeout(10)->get('http://127.0.0.1:8000/summarize', [
+                    'article_url' => $source_url,
+                ]);
+
+                if ($response->successful()) {
+                    return $response->body();
+                }
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $attempt++;
+                if ($attempt > $maxRetries) {
+                    logger()->warning("Failed to summarize {$source_url}: {$e->getMessage()}");
+                    return 'Failed to get summary';
+                }
+            }
+        }
+
     }
 }
