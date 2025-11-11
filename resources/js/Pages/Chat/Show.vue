@@ -1,6 +1,9 @@
 <script setup>
 import { ref, computed } from "vue";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const search = ref("");
 
@@ -45,12 +48,10 @@ async function sendMessage() {
 
     const articleId = selectedArticle.value.id;
 
-    // Ensure this article has a message array
     if (!messages.value[articleId]) {
         messages.value[articleId] = [];
     }
 
-    // User message
     const userMsg = {
         id: Date.now(),
         text: newMessage.value,
@@ -63,23 +64,63 @@ async function sendMessage() {
     newMessage.value = "";
 
     try {
+        let cleanContent = selectedArticle.value.summary || selectedArticle.value.content || "";
+
+        // If it looks like HTML, extract just the text
+        if (cleanContent.includes('<') || cleanContent.includes('window.addEventListener')) {
+            try {
+                // Use DOMParser to properly parse HTML
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(cleanContent, 'text/html');
+
+                // Remove script and style tags
+                const scripts = doc.querySelectorAll('script, style');
+                scripts.forEach(script => script.remove());
+
+
+                cleanContent = doc.body.textContent || doc.body.innerText || "";
+
+                // Clean up whitespace
+                cleanContent = cleanContent
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            } catch (e) {
+                console.error("Error parsing HTML:", e);
+
+            }
+        }
+
+        // Limit length to prevent huge payloads
+        const maxLength = 8000;
+        if (cleanContent.length > maxLength) {
+            cleanContent = cleanContent.substring(0, maxLength) + "...";
+        }
+
         const payload = {
             article_title: selectedArticle.value.title,
-            article_content: selectedArticle.value.content || selectedArticle.value.summary || "",
+            article_content: cleanContent,
             question: userText,
             history: messages.value[articleId]
-                .slice(0, -1) // Exclude the current message we just added
+                .slice(0, -1)
                 .map(m => ({
                     role: m.from === "me" ? "user" : "assistant",
                     content: m.text
                 })),
         };
 
-        console.log("Sending payload:", payload);
+        console.log("=== SENDING REQUEST ===");
+        console.log("URL:", `${API_URL}/chat`);
+        console.log("Content length:", cleanContent.length);
+        console.log("First 500 chars:", cleanContent.substring(0, 500));
+        console.log("=====================");
 
-        const res = await axios.post("http://127.0.0.1:8000/chat", payload, {
+        const res = await axios.post(`${API_URL}/chat`, payload, {
             headers: { "Content-Type": "application/json" }
         });
+
+        console.log("=== RESPONSE RECEIVED ===");
+        console.log("Response:", res.data);
+        console.log("========================");
 
         messages.value[articleId].push({
             id: Date.now() + 1,
@@ -88,13 +129,13 @@ async function sendMessage() {
         });
 
     } catch (err) {
-        console.error("Full Chat error:", err);
+        console.error("=== ERROR OCCURRED ===");
+        console.error("Full error:", err);
         console.error("Error response:", err.response);
-        console.error("Error message:", err.message);
-        console.error("Error status:", err.response?.status);
         console.error("Error data:", err.response?.data);
+        console.error("Error status:", err.response?.status);
+        console.error("=====================");
 
-        // Show error message to user
         messages.value[articleId].push({
             id: Date.now() + 1,
             text: `Error: ${err.response?.data?.detail || err.message || "Please try again"}`,
