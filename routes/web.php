@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ConversationController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RatingController;
 use Illuminate\Foundation\Application;
@@ -33,7 +34,13 @@ Route::prefix('chat')
     ->controller(ConversationController::class)
     ->group(function () {
         Route::get('/chat/{article}', 'chat')->name('chat');
+        Route::post('conversation/', 'getOrCreate')->name('getOrCreate');
     });
-
+Route::prefix('message')
+    ->name('message.')
+    ->controller(MessageController::class)
+    ->group(function () {
+        Route::post('/store', 'store')->name('store');
+    });
 
 require __DIR__.'/auth.php';

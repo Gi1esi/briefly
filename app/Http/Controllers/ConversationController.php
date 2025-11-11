@@ -28,4 +28,18 @@ class ConversationController extends Controller
             'chats' => $chats,
         ]);
     }
+
+    public function getOrCreate(Request $request)
+    {
+        $request->validate([
+            'article_id' => 'required|exists:articles,id',
+        ]);
+
+        $conversation = Conversation::firstOrCreate([
+            'user_id' => auth()->id(),
+            'article_id' => $request->article_id,
+        ]);
+
+        return response()->json($conversation);
+    }
 }

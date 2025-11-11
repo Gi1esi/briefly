@@ -6,8 +6,8 @@ import axios from 'axios';
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const search = ref("");
-
 const newMessage = ref("");
+const conversationId = ref(null)
 
 const props = defineProps({
     article: Object,
@@ -39,8 +39,14 @@ const selectedArticleMessages = computed(() => {
     return messages.value[selectedArticle.value.id] || [];
 });
 
-function selectArticle(article) {
+async function selectArticle(article) {
     selectedArticle.value = article;
+
+    const res = await axios.post('/conversation', {
+        article_id: article.id
+    });
+
+    conversationId.value = res.data.id;
 }
 
 async function sendMessage() {
@@ -108,19 +114,10 @@ async function sendMessage() {
                 })),
         };
 
-        console.log("=== SENDING REQUEST ===");
-        console.log("URL:", `${API_URL}/chat`);
-        console.log("Content length:", cleanContent.length);
-        console.log("First 500 chars:", cleanContent.substring(0, 500));
-        console.log("=====================");
-
         const res = await axios.post(`${API_URL}/chat`, payload, {
             headers: { "Content-Type": "application/json" }
         });
 
-        console.log("=== RESPONSE RECEIVED ===");
-        console.log("Response:", res.data);
-        console.log("========================");
 
         messages.value[articleId].push({
             id: Date.now() + 1,
@@ -130,12 +127,6 @@ async function sendMessage() {
 
     } catch (err) {
         console.error("=== ERROR OCCURRED ===");
-        console.error("Full error:", err);
-        console.error("Error response:", err.response);
-        console.error("Error data:", err.response?.data);
-        console.error("Error status:", err.response?.status);
-        console.error("=====================");
-
         messages.value[articleId].push({
             id: Date.now() + 1,
             text: `Error: ${err.response?.data?.detail || err.message || "Please try again"}`,
@@ -204,7 +195,7 @@ async function sendMessage() {
                         :class="msg.from === 'me' ? 'justify-end' : 'justify-start'"
                     >
                         <div
-                            class="max-w-sm px-4 py-2 rounded-2xl break-words text-sm"
+                            class="max-w-lg px-4 py-2 rounded-2xl break-words text-sm"
                             :class="msg.from === 'me' ? 'bg-brand-primary text-white' : 'bg-white border'"
                         >
                             {{ msg.text }}
