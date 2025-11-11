@@ -1,41 +1,39 @@
 <?php
 
+use App\Http\Controllers\ConversationController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RatingController;
+use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
-use  willvincent\Feeds\Facades\FeedsFacade;
+use Inertia\Inertia;
 
 Route::get('/', function () {
-    return view('welcome');
+    return Inertia::render('Welcome', [
+        'canLogin' => Route::has('login'),
+        'canRegister' => Route::has('register'),
+        'laravelVersion' => Application::VERSION,
+        'phpVersion' => PHP_VERSION,
+    ]);
 });
 
+Route::get('/dashboard', function () {
+    return Inertia::render('Dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::get('/feeds', function () {
-    $feeds = [
-        'https://feeds.bbci.co.uk/news/rss.xml',
-        'https://mwnation.com/category/news/feed/',
-        'https://www.nyasatimes.com/feed/',
-
-    ];
-    $items = [];
-    foreach ($feeds as $feed) {
-        $xml = simplexml_load_file($feed);
-
-        $siteTitle = isset($xml->channel->title) ? (string) $xml->channel->title : '';
-        $siteLink = isset($xml->channel->link) ? (string) $xml->channel->link : '';
-
-        foreach ($xml->channel->item as $item) {
-            $description = cleanHtml($item->description);
-            $items[] = [
-                'siteTitle' => $siteTitle,
-                'siteLink' => $siteLink,
-                'title' => (string) $item->title,
-                'link' => (string) $item->link,
-                'description' => $description,
-                'pubDate' => (string) $item->pubDate,
-            ];
-        }
-    }
-    dd($items);
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+Route::middleware('auth')->post('/articles/rate', [RatingController::class, 'rate']);
+
+Route::prefix('chat')
+    ->name('chat.')
+    ->controller(ConversationController::class)
+    ->group(function () {
+        Route::get('/chat/{article}', 'chat')->name('chat');
+    });
 
 
+require __DIR__.'/auth.php';

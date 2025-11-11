@@ -31,6 +31,10 @@ class User extends Authenticatable
         'digest_last_sent',
     ];
 
+    protected $casts = [
+        'digest_enabled' => 'boolean',
+    ];
+
     /**
      * The attributes that should be hidden for serialization.
      *

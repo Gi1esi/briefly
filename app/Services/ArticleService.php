@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Http;
 class ArticleService
 {
     protected array $feeds = [
-        'https://feeds.bbci.co.uk/news/rss.xml',
         'https://mwnation.com/category/news/feed/',
+        'https://feeds.bbci.co.uk/news/rss.xml',
         'https://www.nyasatimes.com/feed/',
     ];
 
@@ -40,6 +40,7 @@ class ArticleService
                 $description = $this->cleanHtml($item->description);
 //                $content = $this->getFullArticle($source_url);
                 $summary = $this->summarizeArticle($source_url);
+                $imageUrl = $this->extractImage($item);
 
 
                 $article = Article::create([
@@ -48,6 +49,7 @@ class ArticleService
                     'date' => $pubDate,
                     'source'=> $siteTitle,
                     'source_url' => $source_url,
+                    'image_url' => $imageUrl,
                 ]);
 
                 $tags_data = $this->tagArticle($summary);
@@ -132,5 +134,59 @@ class ArticleService
 
         return $doc->saveHTML($body);
     }
+
+    private function extractImage($item): ?string
+    {
+        $namespaces = $item->getNameSpaces(true);
+
+        // 1. Check for media:thumbnail or media:content (BBC style)
+        if (isset($namespaces['media'])) {
+            $media = $item->children($namespaces['media']);
+            if (isset($media->thumbnail)) {
+                $attrs = $media->thumbnail->attributes();
+                if (isset($attrs['url'])) {
+                    return (string) $attrs['url'];
+                }
+            }
+            if (isset($media->content)) {
+                $attrs = $media->content->attributes();
+                if (isset($attrs['url'])) {
+                    return (string) $attrs['url'];
+                }
+            }
+        }
+
+        // 2. Look inside description for an <img> tag (Nation & Nyasa)
+        if (isset($item->description)) {
+            $doc = new DOMDocument();
+            libxml_use_internal_errors(true);
+            $doc->loadHTML((string) $item->description);
+            libxml_clear_errors();
+
+            $imgTags = $doc->getElementsByTagName('img');
+            if ($imgTags->length > 0) {
+                return $imgTags->item(0)->getAttribute('src');
+            }
+        }
+
+        // 3. Check content:encoded for an <img> tag (Nyasa often uses this)
+        if (isset($namespaces['content'])) {
+            $content = $item->children($namespaces['content']);
+            if (isset($content->encoded)) {
+                $doc = new DOMDocument();
+                libxml_use_internal_errors(true);
+                $doc->loadHTML((string) $content->encoded);
+                libxml_clear_errors();
+
+                $imgTags = $doc->getElementsByTagName('img');
+                if ($imgTags->length > 0) {
+                    return $imgTags->item(0)->getAttribute('src');
+                }
+            }
+        }
+
+        return null;
+    }
+
 
 }

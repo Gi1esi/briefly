@@ -15,6 +15,7 @@ class Article extends Model
         'source',
         'source_url',
         'content',
+        'image_url',
     ];
 
     public function tags(): BelongsToMany
@@ -25,4 +26,13 @@ class Article extends Model
     {
         return $this->hasMany(Conversation::class);
     }
+    public function ratings(): HasMany
+    {
+        return $this->hasMany(Rating::class);
+    }
+    public function userRating()
+    {
+        return $this->hasOne(Rating::class)->where('user_id', auth()->id());
+    }
+
 }

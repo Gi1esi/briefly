@@ -15,6 +15,8 @@ class Conversation extends Pivot
         'article_id',
     ];
 
+    protected $table = 'conversations';
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
