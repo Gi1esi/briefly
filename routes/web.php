@@ -41,6 +41,10 @@ Route::prefix('message')
     ->controller(MessageController::class)
     ->group(function () {
         Route::post('/store', 'store')->name('store');
+
     });
+Route::get('/conversation/{conversation}/messages', [MessageController::class, 'messages']);
+Route::get('/chat/{article}', [ConversationController::class, 'chat'])
+    ->name('chat.show');
 
 require __DIR__.'/auth.php';

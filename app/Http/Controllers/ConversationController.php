@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Article;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Services\ScraperService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -12,22 +13,40 @@ class ConversationController extends Controller
 {
     public function chat(Request $request, Article $article)
     {
-        if(!$article->content){
+        // Ensure we have article content
+        if (!$article->content) {
             $content = ScraperService::scrape($article->source_url);
-
-            if($content){
+            if ($content) {
                 $article->content = $content;
                 $article->save();
             }
         }
 
-        $chats = Conversation::where('user_id', auth()->id())->get();
+        // Find or create conversation for this user + article
+        $conversation = Conversation::firstOrCreate([
+            'user_id' => auth()->id(),
+            'article_id' => $article->id,
+        ]);
 
-        return inertia::render('Chat/Show',[
+
+        $messages = Message::with('conversation')
+            ->where('conversation_id', $conversation->id)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        // Sidebar: load all conversations for this user
+        $chats = Conversation::with('article')
+            ->where('user_id', auth()->id())
+            ->get();
+
+        return inertia('Chat/Show', [
             'article' => $article,
             'chats' => $chats,
+            'conversation' => $conversation,
+            'messages' => $messages,
         ]);
     }
+
 
     public function getOrCreate(Request $request)
     {
