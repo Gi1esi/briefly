@@ -204,16 +204,16 @@ async function sendMessage() {
 
 <template>
     <AuthenticatedLayout>
-        <div class="flex h-screen bg-gray-50 px-14 pt-5">
+        <div class="flex h-screen bg-gray-50 dark:bg-neutral-darkBg px-14 pt-5">
             <!-- Sidebar -->
-            <aside class="w-60 border-r bg-white overflow-y-auto">
+            <aside class="w-60 border-r dark:border-r-gray-700 bg-white dark:bg-neutral-darkBg overflow-y-auto">
                 <div class="p-4 font-semibold text-brand-primary text-lg">Chats</div>
                 <div class="px-2">
                     <input
                         v-model="search"
                         type="text"
                         placeholder="Search Chats"
-                        class="w-full text-sm px-2 py-1 rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                        class="w-full text-sm dark:text-gray-300 px-2 py-1 rounded-xl border dark:border-brand-primary/20 focus:outline-none focus:ring-2 focus:ring-brand-primary dark:focus:ring-brand-primary dark:bg-brand-primary/10"
                     />
                 </div>
                 <div class="mt-4">
@@ -221,11 +221,11 @@ async function sendMessage() {
                         v-for="chat in filteredArticles"
                         :key="chat.id"
                         @click="selectArticle(chat)"
-                        class="flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-gray-100 transition-all group"
+                        class="flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-brand-primary/10 transition-all group"
                         :class="selectedArticle && selectedArticle.id === chat.id ? 'bg-gray-100' : ''"
                     >
                         <div class="flex-1 min-w-0 overflow-hidden">
-                            <div class="text-sm text-gray-400 truncate group-hover:text-gray-600"
+                            <div class="text-sm text-gray-400 truncate group-hover:text-gray-600 dark:group-hover:text-gray-400"
                                  :title="chat.article?.title">
                                 {{ chat.article?.title }}
                             </div>
@@ -241,7 +241,7 @@ async function sendMessage() {
             <!-- Chat Area -->
             <main class="flex-1 flex flex-col">
                 <!-- Chat header -->
-                <div class="flex items-center gap-3 p-4 border-b bg-white">
+                <div class="flex items-center gap-3 p-4 border-b dark:border-b-gray-700 bg-white dark:bg-neutral-darkBg">
                     <div
                         v-if="selectedArticle"
                         class="font-semibold text-brand-primary text-base truncate"
@@ -264,8 +264,8 @@ async function sendMessage() {
                             :class="[
             'px-4 py-2 rounded-2xl text-sm prose prose-sm',
             msg.sender === 'user'
-                ? 'bg-brand-primary text-white prose-invert max-w-md'
-                : 'bg-white border text-gray-900 max-w-2xl'
+                ? 'bg-brand-primary dark:bg-brand-primary/50  text-white prose-invert max-w-md'
+                : 'bg-white dark:bg-brand-primary/10 border dark:border-brand-primary/10 text-gray-900 dark:text-gray-400 max-w-2xl'
         ]"
                             v-html="renderMarkdown(msg.message)"
                         ></div>
@@ -275,7 +275,7 @@ async function sendMessage() {
                 </div>
 
                 <!-- Input -->
-                <div class="p-4 border-t bg-white flex items-end gap-3 mb-8 justify-center">
+                <div class="p-4  bg-white dark:bg-neutral-darkBg flex items-end gap-3 mb-8 justify-center">
                     <div class="relative w-full max-w-2xl">
 
                         <!-- Auto-growing textarea -->
@@ -285,18 +285,18 @@ async function sendMessage() {
                             @keyup.enter="sendMessage"
                             rows="3"
                             placeholder="Write your message..."
-                            class="w-full resize-none px-4 py-2 text-sm rounded-xl border
-                            focus:outline-none focus:ring-2 focus:ring-brand-primary overflow-hidden"
+                            class="w-full resize-none px-4 py-2 text-sm rounded-xl border dark:border-brand-primary/20
+                            focus:outline-none focus:ring-1 focus:ring-brand-primary/10 overflow-hidden dark:bg-brand-primary/10 dark:text-gray-300"
                         ></textarea>
 
                         <!-- Live search toggle -->
                         <button
                             @click="useLiveSearch = !useLiveSearch"
                             class="absolute left-4 bottom-4 flex items-center gap-1 px-2 py-1 rounded
-                            hover:bg-gray-100 bg-brand-primary/10"
+                            hover:bg-gray-100 bg-brand-primary/10 dark:bg-brand-primary/20"
                         >
                             <GlobeAltIcon class="w-5 h-5" :class="useLiveSearch ? 'text-brand-primary' : 'text-gray-400'" />
-                            <span class="text-xs font-medium select-none" :class="useLiveSearch ? 'text-brand-primary' : 'text-gray-700'">Live Search</span>
+                            <span class="text-xs font-medium select-none" :class="useLiveSearch ? 'text-brand-primary ' : 'text-gray-700 dark:text-gray-400'">Live Search</span>
                         </button>
 
                         <!-- Send -->

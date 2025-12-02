@@ -110,9 +110,9 @@ async function sendRating(articleId, rating) {
 </script>
 <template>
     <AuthenticatedLayout>
-        <div class="px-14 pt-10 bg-gray-50 min-h-screen">
+        <div class="px-14 pt-10 bg-gray-50 dark:bg-neutral-darkBg min-h-screen">
             <div class="flex items-center justify-between pb-10">
-                <h2 class="text-lg font-semibold text-gray-800">Trending News</h2>
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-neutral-darkText">Top News</h2>
                 <a
                     href="#"
                     class="flex items-center text-sm text-brand-secondary font-medium hover:underline"
@@ -125,7 +125,7 @@ async function sendRating(articleId, rating) {
                 <div
                     v-for="(article) in articles"
                     :key="article.id"
-                    class="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300"
+                    class="bg-white dark:bg-brand-primary/10 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300"
                 >
                     <!-- Image + Overlay -->
                     <div class="relative h-44">
@@ -153,18 +153,60 @@ async function sendRating(articleId, rating) {
 
                     <!-- Bottom content -->
                     <div class="p-4 flex flex-col justify-between h-36">
-                        <p class="text-xs text-gray-700 mb-4">
-                            <span class="font-semibold text-gray-800">Why you should care:</span>
+                        <p class="text-xs text-gray-700 dark:text-gray-400 mb-4">
+                            <span class="font-semibold text-gray-800 dark:text-neutral-darkText">Why you should care:</span>
                             {{ article.title }}
                         </p>
 
                         <div class="flex justify-between items-center">
-                            <a
-                                :href="article.source_url"
-                                target="_blank"
-                                class="text-xs text-gray-500 hover:text-brand-secondary font-medium"
-                            >Read full article</a
-                            >
+                            <div class="flex items-center gap-3 text-gray-500">
+                                <button
+                                    @click="toggleLike(article)"
+                                    class="hover:text-brand-secondary"
+                                >
+                                    <HandThumbUpIcon
+                                        :class="[
+                    'w-4 h-4',
+                    article.liked ? 'text-brand-secondary' : 'text-gray-400',
+                  ]"
+                                    />
+                                </button>
+                                <button
+                                    @click="toggleDislike(article)"
+                                    class="hover:text-brand-secondary"
+                                >
+                                    <HandThumbDownIcon
+                                        :class="[
+                    'w-4 h-4',
+                    article.disliked ? 'text-brand-secondary' : 'text-gray-400',
+                  ]"
+                                    />
+                                </button>
+                                <button @click="article.readLater = !article.readLater" class="hover:text-brand-secondary">
+                                    <ClockIcon
+                                        :class="[
+                    'w-4 h-4',
+                    article.readLater ? 'text-brand-secondary' : 'text-gray-400',
+                  ]"
+                                    />
+                                </button>
+                                <button @click="article.bookmarked = !article.bookmarked" class="hover:text-brand-secondary">
+                                    <BookmarkIcon
+                                        :class="[
+                    'w-4 h-4',
+                    article.bookmarked ? 'text-brand-secondary' : 'text-gray-400',
+                  ]"
+                                    />
+                                </button>
+                                <button @click="article.archived = !article.archived" class="hover:text-brand-secondary">
+                                    <ArchiveBoxIcon
+                                        :class="[
+                    'w-4 h-4',
+                    article.archived ? 'text-brand-secondary' : 'text-gray-400',
+                  ]"
+                                    />
+                                </button>
+                            </div>
                             <button
                                 class="flex items-center text-xs bg-brand-secondary text-white px-3 py-1.5 rounded-full hover:bg-brand-primary transition-colors duration-300"
                             >
@@ -183,7 +225,7 @@ async function sendRating(articleId, rating) {
             <section class="mt-14">
                 <!-- Filter Section -->
                 <div class="flex flex-wrap items-center justify-between mb-6">
-                    <h2 class="text-lg font-semibold text-gray-800">All News</h2>
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-neutral-darkText">All News</h2>
 
                     <div class="flex items-center gap-3 flex-wrap">
                         <button
@@ -193,7 +235,7 @@ async function sendRating(articleId, rating) {
                             class="px-3 py-1.5 text-sm rounded-full border transition-colors duration-200"
                             :class="selectedTag === tag.name
     ? 'bg-brand-secondary text-white border-brand-secondary'
-    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+    : 'bg-white dark:bg-brand-primary/10 text-gray-700 dark:text-gray-400 border-gray-300 dark:border-bg-brand-primary/10 hover:bg-gray-50 dark:hover:bg-brand-primary/30'"
                         >
                             {{ tag.name }}
                         </button>
@@ -205,7 +247,7 @@ async function sendRating(articleId, rating) {
                     <div
                         v-for="(article) in nextArticles"
                         :key="article.id"
-                        class="bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300"
+                        class="bg-white dark:bg-brand-primary/10 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300"
                     >
                         <!-- Image & Overlay -->
                         <div class="relative h-44">
@@ -232,8 +274,8 @@ async function sendRating(articleId, rating) {
 
                         <!-- Bottom Content -->
                         <div class="p-4 flex flex-col justify-between h-44">
-                            <p class="text-xs text-gray-700 mb-3">
-                                <span class="font-semibold text-gray-800">Why you should care:</span>
+                            <p class="text-xs text-gray-700 dark:text-gray-400 mb-3">
+                                <span class="font-semibold text-gray-800 dark:text-neutral-darkText">Why you should care:</span>
                                 {{ article.title }}
                             </p>
 
@@ -313,13 +355,5 @@ async function sendRating(articleId, rating) {
 
 
 <style scoped>
-.text-brand-secondary {
-    color: #ff644f;
-}
-.bg-brand-secondary {
-    background-color: #ff644f;
-}
-.hover\:bg-brand-primary:hover {
-    background-color: #208888;
-}
+
 </style>

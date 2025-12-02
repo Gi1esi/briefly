@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import {onMounted, ref} from 'vue'
 import ApplicationLogo from '@/Components/ApplicationLogo.vue'
 import Dropdown from '@/Components/Dropdown.vue'
 import DropdownLink from '@/Components/DropdownLink.vue'
@@ -7,9 +7,32 @@ import NavLink from '@/Components/NavLink.vue'
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue'
 import { Link, usePage } from '@inertiajs/vue3'
 import Footer from '@/Components/Footer.vue'
+import {
+    ClockIcon,
+    BookmarkIcon,
+
+} from '@heroicons/vue/24/outline'
 
 const showingNavigationDropdown = ref(false)
 const page = usePage()
+
+const isDark = ref(true)
+
+const toggleDark = () => {
+    const html = document.documentElement
+    const darkNow = html.classList.toggle('dark')
+    localStorage.theme = darkNow ? 'dark' : 'light'
+    isDark.value = darkNow
+}
+
+onMounted(() => {
+    const html = document.documentElement
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const shouldBeDark = localStorage.theme === 'dark' || (!localStorage.theme && prefersDark)
+
+    if (shouldBeDark) html.classList.add('dark')
+    isDark.value = shouldBeDark
+})
 </script>
 
 <template>
@@ -42,7 +65,7 @@ const page = usePage()
                             <input
                                 type="text"
                                 placeholder="Search news..."
-                                class="rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                class="rounded-md border border-gray-300 dark:border-brand-primary/10 bg-gray-50 dark:bg-brand-primary/10 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
                             />
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute right-3 top-2.5 text-gray-400 text-brand-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
