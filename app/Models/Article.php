@@ -32,7 +32,7 @@ class Article extends Model
     }
     public function userRating()
     {
-        return $this->hasOne(Rating::class)->where('user_id', auth()->id());
+        return $this->hasOne(Rating::class);
     }
 
 }

@@ -13,7 +13,12 @@ class ArticleController extends Controller
      */
     public function index()
     {
-        $articles = Article::with('tags')
+        $articles = Article::with([
+            'tags',
+            'userRating' => function ($q) {
+                $q->where('user_id', auth()->id());
+            }
+        ])
             ->orderBy('date', 'desc')
             ->take(3)
             ->get();
@@ -30,11 +35,27 @@ class ArticleController extends Controller
 
     public function paginate(request $request)
     {
+        $userId = 4;
         $topIds = Article::orderBy('date', 'desc')->take(3)->pluck('id')->toArray();
-
-        $query = Article::with('tags', 'userRating')
+        $query =  Article::with([
+            'tags',
+            'userRating' => function($query) {
+                $query->where('user_id')
+                    ->whereNull('deleted_at');
+            }
+        ])
             ->orderBy('date', 'desc')
             ->whereNotIn('id', $topIds);
+
+        \Log::info('Auth debug:', [
+            'auth()->id()' => auth()->id(),
+            'Auth::id()' => \Auth::id(),
+            'auth()->user()' => auth()->user(),
+            'Auth::user()' => \Auth::user(),
+            'auth()->check()' => auth()->check(),
+            'session_id' => session()->getId(),
+            'all_session' => session()->all()
+        ]);
 
         if ($request->filled('tag')) {
             $tag = $request->input('tag');
@@ -43,7 +64,7 @@ class ArticleController extends Controller
             });
         }
 
-        $articles = $query->paginate(6); // respects ?page=1,2,...
+        $articles = $query->paginate(6);
         return response()->json($articles);
     }
 

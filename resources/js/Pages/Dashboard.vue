@@ -28,7 +28,14 @@ function toggleTag(tagName) {
 
 async function fetchTopArticles() {
     const res = await fetch('/api/articles')
-    articles.value = await res.json()
+    const data = await res.json()
+    console.log("Articles", data)
+
+    articles.value = data.map(a => ({
+        ...a,
+        liked: a.user_rating?.rating === true,
+        disliked: a.user_rating?.rating === false,
+    }))
 }
 
 async function fetchNextArticles() {
@@ -38,6 +45,9 @@ async function fetchNextArticles() {
 
     const res = await fetch(url)
     const data = await res.json()
+
+    console.log("Next article", data)
+
     nextArticles.value = data.data.map(a => ({
         ...a,
         liked: a.user_rating?.rating === true,

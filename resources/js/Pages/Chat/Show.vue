@@ -2,15 +2,33 @@
 import { ref, computed } from "vue";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import axios from 'axios';
+import { InformationCircleIcon, GlobeAltIcon,  ArrowUpRightIcon } from '@heroicons/vue/24/outline';
+import { marked } from "marked";
+import { router } from '@inertiajs/vue3';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 const search = ref("");
 const newMessage = ref("");
+const useLiveSearch = ref(false);
 
 
+function autoGrow(event) {
+    const el = event.target
+    const minHeight = 50
+    el.style.height = 'auto'
+    el.style.height = Math.max(el.scrollHeight, minHeight) + 'px'
+}
 
-import { router } from '@inertiajs/vue3';
+
+function renderMarkdown(text) {
+    if (!text) return "";
+    return marked.parse(text, {
+        breaks: true
+    });
+}
+
+
 
 function selectArticle(chat) {
     router.visit(`/chat/${chat.article.id}`);
@@ -81,15 +99,16 @@ async function sendMessage() {
     if (!newMessage.value || !selectedArticle.value) return;
 
     const userText = newMessage.value;
-    const userMsg = {
-        id: Date.now(),
+    const userMsg = { id: Date.now(),
         message: userText,
-        sender: "user"
+        sender: "user",
+        live: useLiveSearch.value
     };
 
     messages.value.push(userMsg);
 
     newMessage.value = "";
+    useLiveSearch.value = false;
 
     // Save user message to DB
     const savedUser = await saveToDB(conversationId.value, "me", userText);
@@ -138,6 +157,7 @@ async function sendMessage() {
             article_title: selectedArticle.value.title,
             article_content: cleanContent,
             question: userText,
+            useLiveSearch: userMsg.live,
             history: messages.value
                 .slice(0, -1)
                 .map(m => ({
@@ -151,6 +171,8 @@ async function sendMessage() {
         const res = await axios.post(`${API_URL}/chat`, payload, {
             headers: { "Content-Type": "application/json" }
         });
+
+        console.log("Data: ", res.data)
 
         const aiText = res.data.answer;
         const aiMsg = {
@@ -182,7 +204,7 @@ async function sendMessage() {
 
 <template>
     <AuthenticatedLayout>
-        <div class="flex h-screen bg-gray-50 px-14 pt-10">
+        <div class="flex h-screen bg-gray-50 px-14 pt-5">
             <!-- Sidebar -->
             <aside class="w-60 border-r bg-white overflow-y-auto">
                 <div class="p-4 font-semibold text-brand-primary text-lg">Chats</div>
@@ -209,9 +231,9 @@ async function sendMessage() {
                             </div>
                         </div>
 
-                        <div class="text-xs text-gray-400 flex-shrink-0 ml-2 group-hover:text-gray-500">
-                            2:58pm
-                        </div>
+<!--                        <div class="text-xs text-gray-400 flex-shrink-0 ml-2 group-hover:text-gray-500">-->
+<!--                            2:58pm-->
+<!--                        </div>-->
                     </div>
                 </div>
             </aside>
@@ -231,7 +253,7 @@ async function sendMessage() {
                 </div>
 
                 <!-- Messages -->
-                <div class="flex-1 overflow-y-auto p-6 space-y-4">
+                <div class="flex-1 overflow-y-auto p-6 space-y-4 ">
                     <div
                         v-for="msg in messages"
                         :key="msg.id"
@@ -239,32 +261,63 @@ async function sendMessage() {
                         :class="msg.sender === 'user' ? 'justify-end' : 'justify-center'"
                     >
                         <div
-                            class="max-w-lg px-4 py-2 rounded-2xl break-words text-sm"
-                            :class="msg.sender === 'user' ? 'bg-brand-primary text-white' : 'bg-white border'"
-                        >
-                            {{ msg.message }}
-                        </div>
+                            :class="[
+            'px-4 py-2 rounded-2xl text-sm prose prose-sm',
+            msg.sender === 'user'
+                ? 'bg-brand-primary text-white prose-invert max-w-md'
+                : 'bg-white border text-gray-900 max-w-2xl'
+        ]"
+                            v-html="renderMarkdown(msg.message)"
+                        ></div>
                     </div>
+
+
                 </div>
 
                 <!-- Input -->
-                <div class="p-4 border-t bg-white flex items-center gap-3">
-                    <input
-                        v-model="newMessage"
-                        @keyup.enter="sendMessage"
-                        type="text"
-                        placeholder="Write your message..."
-                        class="flex-1 px-4 py-2 text-sm rounded-xl border focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                        :disabled="!selectedArticle"
-                    />
-                    <button
-                        @click="sendMessage"
-                        class="px-4 py-2 text-sm bg-brand-secondary text-white rounded-xl"
-                        :disabled="!selectedArticle"
-                    >
-                        Send
-                    </button>
+                <div class="p-4 border-t bg-white flex items-end gap-3 mb-8 justify-center">
+                    <div class="relative w-full max-w-2xl">
+
+                        <!-- Auto-growing textarea -->
+                        <textarea
+                            v-model="newMessage"
+                            @input="autoGrow"
+                            @keyup.enter="sendMessage"
+                            rows="3"
+                            placeholder="Write your message..."
+                            class="w-full resize-none px-4 py-2 text-sm rounded-xl border
+                            focus:outline-none focus:ring-2 focus:ring-brand-primary overflow-hidden"
+                        ></textarea>
+
+                        <!-- Live search toggle -->
+                        <button
+                            @click="useLiveSearch = !useLiveSearch"
+                            class="absolute left-4 bottom-4 flex items-center gap-1 px-2 py-1 rounded
+                            hover:bg-gray-100 bg-brand-primary/10"
+                        >
+                            <GlobeAltIcon class="w-5 h-5" :class="useLiveSearch ? 'text-brand-primary' : 'text-gray-400'" />
+                            <span class="text-xs font-medium select-none" :class="useLiveSearch ? 'text-brand-primary' : 'text-gray-700'">Live Search</span>
+                        </button>
+
+                        <!-- Send -->
+                        <button
+                            @click="sendMessage"
+                            :disabled="!newMessage.trim().length"
+                            class="absolute right-4 bottom-4 px-3 py-1.5 text-sm rounded"
+                            :class="newMessage.trim().length
+                            ? 'bg-brand-secondary text-white'
+                            : 'bg-brand-secondary/30 text-gray-50 cursor-not-allowed'"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
+                            </svg>
+
+
+                        </button>
+
+                    </div>
                 </div>
+
             </main>
         </div>
     </AuthenticatedLayout>
