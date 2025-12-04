@@ -1,9 +1,12 @@
 <?php
 
+use App\Http\Controllers\ArticleController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RatingController;
+use App\Http\Controllers\TagController;
+use App\Http\Controllers\UserFactController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -28,6 +31,12 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::middleware('auth')->post('/articles/rate', [RatingController::class, 'rate']);
+Route::middleware(['auth'])->group(function () {
+    Route::get('/read-later', [ArticleController::class, 'readLater'])->name('articles.readLater');
+    Route::get('/bookmarks', [ArticleController::class, 'bookmarked'])->name('articles.bookmarked');
+});
+
+Route::middleware('auth')->get('/topics', [TagController::class, 'topics'])->name('topics.topics');
 
 Route::prefix('chat')
     ->name('chat.')
@@ -46,5 +55,9 @@ Route::prefix('message')
 Route::get('/conversation/{conversation}/messages', [MessageController::class, 'messages']);
 Route::get('/chat/{article}', [ConversationController::class, 'chat'])
     ->name('chat.show');
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/personalization', [UserFactController::class, 'index'])->name('user-facts.index');
+});
 
 require __DIR__.'/auth.php';

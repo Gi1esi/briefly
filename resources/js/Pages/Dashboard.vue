@@ -11,6 +11,7 @@ import {
 } from '@heroicons/vue/24/outline'
 import {Link, usePage} from "@inertiajs/vue3";
 import Pagination from "@/Components/Pagination.vue";
+import NewsCard from "@/Components/NewsCard.vue";
 
 const articles = ref([])
 const nextArticles = ref([])
@@ -27,31 +28,39 @@ function toggleTag(tagName) {
 
 
 async function fetchTopArticles() {
-    const res = await fetch('/api/articles')
-    const data = await res.json()
+    await axios.get('/sanctum/csrf-cookie');
+    const res = await axios.get('/api/articles')
+    const data = await res.data
     console.log("Articles", data)
 
     articles.value = data.map(a => ({
         ...a,
-        liked: a.user_rating?.rating === true,
-        disliked: a.user_rating?.rating === false,
+        liked: a.user_rating?.rating === 1,
+        disliked: a.user_rating?.rating === 0,
+        bookmarked: a.user_flag?.is_bookmarked || false,
+        readLater: a.user_flag?.is_read_later || false,
+        archived: a.user_flag?.is_archived || false,
     }))
 }
 
 async function fetchNextArticles() {
+    await axios.get('/sanctum/csrf-cookie');
     const url = new URL('/api/articles/paginate', window.location.origin)
     if (selectedTag.value) url.searchParams.set('tag', selectedTag.value)
     url.searchParams.set('page', page.value)
 
-    const res = await fetch(url)
-    const data = await res.json()
+    const res = await axios.get(url)
+    const data = await res.data
 
     console.log("Next article", data)
 
     nextArticles.value = data.data.map(a => ({
         ...a,
-        liked: a.user_rating?.rating === true,
-        disliked: a.user_rating?.rating === false,
+        liked: a.user_rating?.rating === 1,
+        disliked: a.user_rating?.rating === 0,
+        bookmarked: a.user_flag?.is_bookmarked || false,
+        readLater: a.user_flag?.is_read_later || false,
+        archived: a.user_flag?.is_archived || false,
     }))
     pagination.value = data
 }
@@ -105,6 +114,21 @@ async function sendRating(articleId, rating) {
     }
 }
 
+async function toggleFlag(article, flagName) {
+    try {
+        const { data } = await axios.post('/api/flags/toggle', {
+            article_id: article.id,
+            flag: flagName
+        });
+
+        article.bookmarked = data.is_bookmarked;
+        article.readLater = data.is_read_later;
+        article.archived = data.is_archived;
+    } catch (err) {
+        console.error('Failed to toggle flag:', err);
+    }
+}
+
 
 
 </script>
@@ -122,102 +146,14 @@ async function sendRating(articleId, rating) {
                 </a>
             </div>
             <div class="grid md:grid-cols-3 gap-6">
-                <div
-                    v-for="(article) in articles"
+                <NewsCard
+                    v-for="article in articles"
                     :key="article.id"
-                    class="bg-white dark:bg-brand-primary/10 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300"
-                >
-                    <!-- Image + Overlay -->
-                    <div class="relative h-44">
-                        <img
-                            :src="article.image_url ? article.image_url: 'https://www.muva.de/fileadmin/_processed_/f/b/csm_AdobeStock-201227953-News_4f340aa6d7.jpg'"
-                            alt="News image"
-                            class="w-full h-full object-cover"
-                        />
-                        <div
-                            class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"
-                        ></div>
-                        <div class="absolute bottom-3 left-3 right-3 text-white">
-                            <h3 class="text-sm font-semibold leading-tight">
-                                {{ article.title }}
-                            </h3>
-                            <p class="text-xs text-gray-200 mt-1">{{ article.source }}</p>
-                        </div>
-                        <span
-                            class="absolute top-3 right-3 bg-white/90 text-[11px] font-semibold px-3 py-1 rounded-md text-brand-secondary uppercase tracking-wide"
-                        >
-            {{ article.tags[0]?.name || 'Uncategorized' }}
-          </span>
-                    </div>
-
-
-                    <!-- Bottom content -->
-                    <div class="p-4 flex flex-col justify-between h-36">
-                        <p class="text-xs text-gray-700 dark:text-gray-400 mb-4">
-                            <span class="font-semibold text-gray-800 dark:text-neutral-darkText">Why you should care:</span>
-                            {{ article.title }}
-                        </p>
-
-                        <div class="flex justify-between items-center">
-                            <div class="flex items-center gap-3 text-gray-500">
-                                <button
-                                    @click="toggleLike(article)"
-                                    class="hover:text-brand-secondary"
-                                >
-                                    <HandThumbUpIcon
-                                        :class="[
-                    'w-4 h-4',
-                    article.liked ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                    />
-                                </button>
-                                <button
-                                    @click="toggleDislike(article)"
-                                    class="hover:text-brand-secondary"
-                                >
-                                    <HandThumbDownIcon
-                                        :class="[
-                    'w-4 h-4',
-                    article.disliked ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                    />
-                                </button>
-                                <button @click="article.readLater = !article.readLater" class="hover:text-brand-secondary">
-                                    <ClockIcon
-                                        :class="[
-                    'w-4 h-4',
-                    article.readLater ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                    />
-                                </button>
-                                <button @click="article.bookmarked = !article.bookmarked" class="hover:text-brand-secondary">
-                                    <BookmarkIcon
-                                        :class="[
-                    'w-4 h-4',
-                    article.bookmarked ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                    />
-                                </button>
-                                <button @click="article.archived = !article.archived" class="hover:text-brand-secondary">
-                                    <ArchiveBoxIcon
-                                        :class="[
-                    'w-4 h-4',
-                    article.archived ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                    />
-                                </button>
-                            </div>
-                            <button
-                                class="flex items-center text-xs bg-brand-secondary text-white px-3 py-1.5 rounded-full hover:bg-brand-primary transition-colors duration-300"
-                            >
-                                <Link :href="route('chat.chat', article.id)" class="flex items-center">
-                                    <ChatBubbleLeftEllipsisIcon class="w-4 h-4 mr-1" />
-                                    Chat
-                                </Link>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                    :article="article"
+                    :onToggleLike="toggleLike"
+                    :onToggleDislike="toggleDislike"
+                    :onToggleFlag="toggleFlag"
+                />
             </div>
 
 
@@ -244,102 +180,14 @@ async function sendRating(articleId, rating) {
 
                 <!-- News Cards Grid -->
                 <div class="grid md:grid-cols-3 gap-6">
-                    <div
-                        v-for="(article) in nextArticles"
+                    <NewsCard
+                        v-for="article in nextArticles"
                         :key="article.id"
-                        class="bg-white dark:bg-brand-primary/10 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-all duration-300"
-                    >
-                        <!-- Image & Overlay -->
-                        <div class="relative h-44">
-                            <img
-                                :src="article.image_url? article.image_url: 'https://cdn.create.vista.com/api/media/small/251043176/stock-photo-selective-focus-laptop-blank-screen-business-newspapers-glasses-pen-paper'"
-                                alt="News image"
-                                class="w-full h-full object-cover"
-                            />
-                            <div
-                                class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"
-                            ></div>
-                            <div class="absolute bottom-3 left-3 right-3 text-white">
-                                <a class="text-sm font-bold leading-tight" :href="article.source_url">
-                                    {{ article.title }}
-                                </a>
-                                <p class="text-xs text-gray-200 mt-1">{{ article.source }}</p>
-                            </div>
-                            <span
-                                class="absolute top-3 right-3 bg-white/90 text-[11px] font-semibold px-3 py-1 rounded-md text-brand-secondary uppercase tracking-wide"
-                            >
-              {{ article.tags[0]?.name || 'Uncategorized' }}
-          </span>
-                        </div>
-
-                        <!-- Bottom Content -->
-                        <div class="p-4 flex flex-col justify-between h-44">
-                            <p class="text-xs text-gray-700 dark:text-gray-400 mb-3">
-                                <span class="font-semibold text-gray-800 dark:text-neutral-darkText">Why you should care:</span>
-                                {{ article.title }}
-                            </p>
-
-                            <!-- Action Icons -->
-                            <div class="flex justify-between items-center mt-auto">
-                                <div class="flex items-center gap-3 text-gray-500">
-                                    <button
-                                        @click="toggleLike(article)"
-                                        class="hover:text-brand-secondary"
-                                    >
-                                        <HandThumbUpIcon
-                                            :class="[
-                    'w-4 h-4',
-                    article.liked ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                        />
-                                    </button>
-                                    <button
-                                        @click="toggleDislike(article)"
-                                        class="hover:text-brand-secondary"
-                                    >
-                                        <HandThumbDownIcon
-                                            :class="[
-                    'w-4 h-4',
-                    article.disliked ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                        />
-                                    </button>
-                                    <button @click="article.readLater = !article.readLater" class="hover:text-brand-secondary">
-                                        <ClockIcon
-                                            :class="[
-                    'w-4 h-4',
-                    article.readLater ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                        />
-                                    </button>
-                                    <button @click="article.bookmarked = !article.bookmarked" class="hover:text-brand-secondary">
-                                        <BookmarkIcon
-                                            :class="[
-                    'w-4 h-4',
-                    article.bookmarked ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                        />
-                                    </button>
-                                    <button @click="article.archived = !article.archived" class="hover:text-brand-secondary">
-                                        <ArchiveBoxIcon
-                                            :class="[
-                    'w-4 h-4',
-                    article.archived ? 'text-brand-secondary' : 'text-gray-400',
-                  ]"
-                                        />
-                                    </button>
-                                </div>
-                                <button
-                                    class="flex items-center text-xs bg-brand-secondary text-white px-3 py-1.5 rounded-full hover:bg-brand-primary transition-colors duration-300"
-                                >
-                                    <Link :href="route('chat.chat', article.id)" class="flex items-center">
-                                        <ChatBubbleLeftEllipsisIcon class="w-4 h-4 mr-1" />
-                                        Chat
-                                    </Link>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                        :article="article"
+                        :onToggleLike="toggleLike"
+                        :onToggleDislike="toggleDislike"
+                        :onToggleFlag="toggleFlag"
+                    />
                 </div>
 
                 <Pagination

@@ -17,7 +17,8 @@ class ArticleController extends Controller
             'tags',
             'userRating' => function ($q) {
                 $q->where('user_id', auth()->id());
-            }
+            },
+            'userFlag' => fn($q) => $q->where('user_id', auth()->id()),
         ])
             ->orderBy('date', 'desc')
             ->take(3)
@@ -39,10 +40,10 @@ class ArticleController extends Controller
         $topIds = Article::orderBy('date', 'desc')->take(3)->pluck('id')->toArray();
         $query =  Article::with([
             'tags',
-            'userRating' => function($query) {
-                $query->where('user_id')
-                    ->whereNull('deleted_at');
-            }
+            'userRating' => function ($q) {
+                $q->where('user_id', auth()->id());
+            },
+            'userFlag' => fn($q) => $q->where('user_id', auth()->id()),
         ])
             ->orderBy('date', 'desc')
             ->whereNotIn('id', $topIds);
@@ -71,6 +72,79 @@ class ArticleController extends Controller
     /**
      * Show the form for creating a new resource.
      */
+
+    public function readLater(Request $request)
+    {
+        $user = $request->user();
+
+        $articles = Article::with(['tags', 'userFlag', 'userRating'])
+            ->whereHas('userFlag', function ($q) use ($user) {
+                $q->where('user_id', $user->id)
+                    ->where('is_read_later', true);
+            })
+            ->paginate(12);
+
+
+        return Inertia::render('Articles/ReadLater', [
+            'articles' => $articles->through(fn($article) => [
+                'id' => $article->id,
+                'title' => $article->title,
+                'summary' => $article->summary,
+                'image_url' => $article->image_url,
+                'source' => $article->source,
+                'source_url' => $article->source_url,
+                'tags' => $article->tags,
+                'liked' => $article->userRating?->rating === 1,
+                'disliked' => $article->userRating?->rating === 0,
+                'bookmarked' => $article->userFlag?->is_bookmarked ?? false,
+                'readLater' => $article->userFlag?->is_read_later ?? false,
+                'archived' => $article->userFlag?->is_archived ?? false,
+            ])->values()->all(),
+            'pagination' => [
+                'total' => $articles->total(),
+                'per_page' => $articles->perPage(),
+                'current_page' => $articles->currentPage(),
+                'last_page' => $articles->lastPage(),
+            ]
+        ]);
+    }
+
+    public function bookmarked()
+    {
+        $user = auth()->user();
+
+        $articles = Article::whereHas('userFlag', function ($q) use ($user) {
+            $q->where('user_id', $user->id)
+                ->where('is_bookmarked', true);
+        })
+            ->with(['tags', 'userFlag', 'userRating'])
+            ->paginate(6);
+
+        return Inertia::render('Articles/Bookmarked', [
+            'articles' => $articles->through(fn($article) => [
+                'id' => $article->id,
+                'title' => $article->title,
+                'summary' => $article->summary,
+                'image_url' => $article->image_url,
+                'source' => $article->source,
+                'source_url' => $article->source_url,
+                'tags' => $article->tags,
+                'liked' => $article->userRating?->rating === 1,
+                'disliked' => $article->userRating?->rating === 0,
+                'bookmarked' => $article->userFlag?->is_bookmarked ?? false,
+                'readLater' => $article->userFlag?->is_read_later ?? false,
+                'archived' => $article->userFlag?->is_archived ?? false,
+            ])->values()->all(),
+            'pagination' => [
+                'total' => $articles->total(),
+                'per_page' => $articles->perPage(),
+                'current_page' => $articles->currentPage(),
+                'last_page' => $articles->lastPage(),
+            ]
+        ]);
+    }
+
+
     public function create()
     {
         //

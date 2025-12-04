@@ -34,5 +34,10 @@ class Article extends Model
     {
         return $this->hasOne(Rating::class);
     }
+    public function userFlag()
+    {
+        return $this->hasOne(ArticleFlag::class)->where('user_id', auth()->id());
+    }
+
 
 }

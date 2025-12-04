@@ -22,7 +22,7 @@ export default {
                 neutral: {
                     bg: '#ffffff',
                     text: '#1a1a1a',
-                    darkBg: '#0f172a',
+                    darkBg: '#030712',
                     darkText: '#f1f5f9',
                 }
             }

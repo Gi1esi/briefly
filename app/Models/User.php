@@ -70,4 +70,8 @@ class User extends Authenticatable
     {
         return $this->hasMany(Conversation::class);
     }
+    public function facts()
+    {
+        return $this->hasMany(UserFact::class);
+    }
 }

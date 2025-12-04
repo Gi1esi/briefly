@@ -53,8 +53,10 @@ onMounted(() => {
 
                         <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                             <NavLink :href="route('dashboard')" :active="route().current('dashboard')">Home</NavLink>
-                            <NavLink href="#" :active="false">Topics</NavLink>
-                            <NavLink href="#" :active="false">Read Later</NavLink>
+                            <NavLink href="/topics" :active="false">Topics</NavLink>
+                            <NavLink href="/read-later" :active="false">Read Later</NavLink>
+                            <NavLink href="#" :active="false">Chats</NavLink>
+                            <NavLink href="/bookmarks" :active="false">Bookmarks</NavLink>
                         </div>
                     </div>
 
@@ -65,7 +67,7 @@ onMounted(() => {
                             <input
                                 type="text"
                                 placeholder="Search news..."
-                                class="rounded-md border border-gray-300 dark:border-brand-primary/10 bg-gray-50 dark:bg-brand-primary/10 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                class="rounded-md border border-gray-300 dark:border-brand-primary/10 bg-gray-50 dark:bg-brand-primary/10 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-primary dark:text-gray-300"
                             />
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute right-3 top-2.5 text-gray-400 text-brand-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
@@ -92,6 +94,7 @@ onMounted(() => {
                                 <template #content>
                                     <DropdownLink :href="route('profile.edit')">Profile</DropdownLink>
                                     <DropdownLink :href="route('logout')" method="post" as="button">Log Out</DropdownLink>
+                                    <DropdownLink :href="route('user-facts.index')">Personalization</DropdownLink>
                                 </template>
                             </Dropdown>
                         </div>
@@ -115,9 +118,11 @@ onMounted(() => {
             <!-- Responsive Dropdown Menu -->
             <div :class="{ block: showingNavigationDropdown, hidden: !showingNavigationDropdown }" class="sm:hidden">
                 <div class="space-y-1 pb-3 pt-2">
-                    <ResponsiveNavLink :href="route('dashboard')" :active="route().current('dashboard')">Home</ResponsiveNavLink>
-                    <ResponsiveNavLink href="#">Topics</ResponsiveNavLink>
-                    <ResponsiveNavLink href="#">Read Later</ResponsiveNavLink>
+                    <NavLink :href="route('dashboard')" :active="route().current('dashboard')">Home</NavLink>
+                    <NavLink href="/topics" :active="false">Topics</NavLink>
+                    <NavLink href="/read-later" :active="false">Read Later</NavLink>
+                    <NavLink href="#" :active="false">Chats</NavLink>
+                    <NavLink href="/bookmarks" :active="false">Bookmarks</NavLink>
                 </div>
 
                 <div class="border-t border-gray-200 pb-1 pt-4 dark:border-gray-600">
@@ -129,6 +134,7 @@ onMounted(() => {
                     <div class="mt-3 space-y-1">
                         <ResponsiveNavLink :href="route('profile.edit')">Profile</ResponsiveNavLink>
                         <ResponsiveNavLink :href="route('logout')" method="post" as="button">Log Out</ResponsiveNavLink>
+                        <NavLink href="/personalization" :active="false">Personalization</NavLink>
                     </div>
                 </div>
             </div>
