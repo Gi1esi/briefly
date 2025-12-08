@@ -10,177 +10,253 @@ use Illuminate\Support\Facades\Http;
 class ArticleService
 {
     protected array $feeds = [
-        'https://mwnation.com/category/news/feed/',
-        'https://feeds.bbci.co.uk/news/rss.xml',
-        'https://www.nyasatimes.com/feed/',
+        // The Conversation feeds (Atom format) - with category mapping
+//        'https://theconversation.com/africa/arts/articles.atom' => 'culture-lifestyle',
+//        'https://theconversation.com/africa/climate/articles.atom' => 'environment',
+//        'https://theconversation.com/africa/business/articles.atom' => 'finance',
+//        'https://theconversation.com/africa/education/articles.atom' => 'education',
+//        'https://theconversation.com/africa/environment/articles.atom' => 'environment',
+//        'https://theconversation.com/africa/health/articles.atom' => 'health',
+//        'https://theconversation.com/africa/politics/articles.atom' => 'politics',
+//        'https://theconversation.com/africa/technology/articles.atom' => 'technology',
     ];
 
-    public function scrapeFeed(): void{
-        foreach ($this->feeds as $feed) {
+    protected array $rssFeeds = [
+        'https://mwnation.com/category/news/feed/',
+//        'https://www.nyasatimes.com/feed/',
+//        'https://feeds.bbci.co.uk/news/rss.xml',
+    ];
+
+    protected array $conversationCategoryMap = [
+        'arts' => 'culture-lifestyle',
+        'climate' => 'environment',
+        'business' => 'finance',
+        'education' => 'education',
+        'environment' => 'environment',
+        'health' => 'health',
+        'politics' => 'politics',
+        'technology' => 'technology',
+    ];
+
+    public function scrapeFeed(): void
+    {
+        // Process The Conversation feeds (Atom with categories)
+        foreach ($this->feeds as $feed => $category) {
+            echo "\n=== Processing Atom feed: {$feed} ===\n";
             $xml = @simplexml_load_file($feed);
-            if (!$xml) continue;
+            if (!$xml) {
+                echo "❌ Failed to load feed: {$feed}\n";
+                continue;
+            }
 
-            $siteTitle = isset($xml->channel->title) ? (string) $xml->channel->title : '';
-            $siteLink = isset($xml->channel->link) ? (string) $xml->channel->link : '';
+            if (isset($xml->entry)) {
+                $this->processAtomFeed($xml, $feed, $category);
+            } else {
+                echo "❌ Not a valid Atom feed: {$feed}\n";
+            }
+        }
 
-            foreach ($xml->channel->item as $item) {
-                $link = (string) $item->link;
-                $pubDate = $item->pubDate ? date('Y-m-d', strtotime($item->pubDate)) : null;
-                $today = date('Y-m-d');
-                $maxLinkLength = 191;
+        // Process regular RSS feeds
+        foreach ($this->rssFeeds as $feed) {
+            echo "\n=== Processing RSS feed: {$feed} ===\n";
+            $xml = @simplexml_load_file($feed);
+            if (!$xml) {
+                echo "❌ Failed to load feed: {$feed}\n";
+                continue;
+            }
 
-                if(Article::where('source_url', $link)->exists() || ($pubDate && $pubDate < $today) || strlen($link) > $maxLinkLength)
-                {
-                    echo("skipping\n");
-                    continue;
-                }
+            if (isset($xml->channel)) {
+                $this->processRssFeed($xml, $feed, null);
+            } else {
+                echo "❌ Not a valid RSS feed: {$feed}\n";
+            }
+        }
 
-                $title = (string) $item->title;
-                $source_url  = (string) $item->link;
-                $description = $this->cleanHtml($item->description);
-//                $content = $this->getFullArticle($source_url);
-                $summary = $this->summarizeArticle($source_url);
-                $imageUrl = $this->extractImage($item);
+        echo "\n=== Feed scraping completed ===\n";
+    }
 
+    private function processRssFeed(\SimpleXMLElement $xml, string $feedUrl, ?string $categorySlug): void
+    {
+        $siteTitle = isset($xml->channel->title) ? (string) $xml->channel->title : '';
+        $siteLink = isset($xml->channel->link) ? (string) $xml->channel->link : '';
 
+        $itemCount = 0;
+        $skipCount = 0;
+        $totalItems = count($xml->channel->item ?? []);
+        echo "Found {$totalItems} RSS items\n";
+
+        foreach ($xml->channel->item as $item) {
+            $link = (string) $item->link;
+            $pubDate = $item->pubDate ? date('Y-m-d', strtotime($item->pubDate)) : null;
+            $maxLinkLength = 191;
+
+            if (Article::where('source_url', $link)->exists()) {
+                $skipCount++;
+                continue;
+            }
+
+            $yesterday = date('Y-m-d', strtotime('-1 day'));
+            if ($pubDate && $pubDate < $yesterday) {
+                echo "⏩ Skipping old article: {$pubDate}\n";
+                $skipCount++;
+                continue;
+            }
+
+            if (strlen($link) > $maxLinkLength) {
+                echo "⏩ Skipping - link too long\n";
+                $skipCount++;
+                continue;
+            }
+
+            $title = (string) $item->title;
+            $source_url = (string) $item->link;
+            $description = $this->cleanHtml($item->description);
+            $summary = $this->summarizeArticle($source_url);
+            $imageUrl = $this->extractImage($item);
+
+            echo "📝 Creating article: {$title}\n";
+            echo "   Summary length: " . strlen($summary ?? '') . " chars\n";
+
+            try {
                 $article = Article::create([
                     'title' => $title,
-                    'summary' => $summary,
+                    'summary' => $summary ?? $description,
                     'date' => $pubDate,
-                    'source'=> $siteTitle,
+                    'source' => $siteTitle,
                     'source_url' => $source_url,
                     'image_url' => $imageUrl,
                 ]);
 
-                $tags_data = $this->tagArticle($summary);
-                $tags = json_decode($tags_data, true);
-                $tagIds = Tag::whereIn('name', $tags)->pluck('id')->toArray();
-                $article->tags()->sync($tagIds);
+                echo "🔄 Calling tagArticle API...\n";
+                $tags_data = $this->tagArticle($summary ?? $description);
 
+                // Normalize tags
+                $flatTags = $this->normalizeTagsForWhereIn($tags_data);
+                echo "   Normalized tags: " . (empty($flatTags) ? '[]' : implode(', ', $flatTags)) . "\n";
 
-
-            }
-        }
-    }
-
-    private function getFullArticle(string $source_url): string
-    {
-        //
-    }
-    private function summarizeArticle(string $source_url): ?string
-    {
-        $maxRetries = 1;
-        $attempt = 0;
-
-        while ($attempt <= $maxRetries) {
-            try {
-                $response = Http::timeout(10)->get('http://127.0.0.1:8000/summarize', [
-                    'article_url' => $source_url,
-                ]);
-
-                if ($response->successful()) {
-                    return $response->body();
+                $tagIds = [];
+                if (empty($flatTags)) {
+                    $defaultTag = Tag::where('name', 'General')->first();
+                    if ($defaultTag) $tagIds = [$defaultTag->id];
+                } else {
+                    $tagIds = Tag::whereIn('name', $flatTags)->pluck('id')->toArray();
+                    if (empty($tagIds)) {
+                        foreach ($flatTags as $tagName) {
+                            $cleanName = trim($tagName);
+                            if ($cleanName === '') continue;
+                            $slug = strtolower(str_replace(' ', '-', preg_replace('/[^A-Za-z0-9\s\-]/', '', $cleanName)));
+                            $tag = Tag::firstOrCreate(
+                                ['name' => $cleanName],
+                                ['slug' => $slug, 'description' => 'Auto-generated tag']
+                            );
+                            $tagIds[] = $tag->id;
+                        }
+                    }
                 }
-            } catch (\Illuminate\Http\Client\ConnectionException $e) {
-                $attempt++;
-                if ($attempt > $maxRetries) {
-                    logger()->warning("Failed to summarize {$source_url}: {$e->getMessage()}");
-                    return 'Failed to get summary';
-                }
+
+                if (!empty($tagIds)) $article->tags()->sync($tagIds);
+
+                $itemCount++;
+                echo "✅ Added article: {$title}\n";
+            } catch (\Exception $e) {
+                echo "❌ Error creating article: {$e->getMessage()}\n";
+                $skipCount++;
             }
+
+            echo "---\n";
         }
 
+        echo "📊 RSS Results: Added {$itemCount}, Skipped {$skipCount}\n";
     }
 
-    private function tagArticle($summary)
+    private function processAtomFeed(\SimpleXMLElement $xml, string $feedUrl, ?string $categorySlug): void
     {
-        $maxRetries = 1;
-        $attempt = 0;
-        $default_tags = ['Politics'];
+        $siteTitle = isset($xml->title) ? (string) $xml->title : 'The Conversation';
+        if (!$categorySlug) $categorySlug = $this->extractCategoryFromConversationUrl($feedUrl);
 
-        while ($attempt <= $maxRetries) {
+        $tag = Tag::where('slug', $categorySlug)->first();
+        if (!$tag) {
+            $tagName = ucwords(str_replace('-', ' ', $categorySlug));
+            $tag = Tag::firstOrCreate(
+                ['slug' => $categorySlug],
+                ['name' => $tagName, 'description' => 'Auto-generated from The Conversation']
+            );
+        }
+
+        $tagIds = [$tag->id];
+        echo "✅ Using category: {$categorySlug} (Tag ID: {$tag->id}, Name: {$tag->name})\n";
+
+        $itemCount = 0;
+        $skipCount = 0;
+        $totalEntries = count($xml->entry ?? []);
+        echo "Found {$totalEntries} Atom entries\n";
+
+        foreach ($xml->entry as $entry) {
+            $link = $this->extractAtomLink($entry);
+            if (!$link) { $skipCount++; continue; }
+
+            $pubDate = isset($entry->published) ? date('Y-m-d', strtotime($entry->published)) : null;
+            $maxLinkLength = 191;
+
+            if (Article::where('source_url', $link)->exists()) { $skipCount++; continue; }
+            $oneWeekAgo = date('Y-m-d', strtotime('-7 days'));
+            if ($pubDate && $pubDate < $oneWeekAgo) { $skipCount++; continue; }
+            if (strlen($link) > $maxLinkLength) { $skipCount++; continue; }
+
+            $title = (string) $entry->title;
+            $source_url = $link;
+            $description = $this->cleanHtml($entry->summary ?? $entry->content ?? '');
+            $summary = (string) ($entry->summary ?? $description);
+            $imageUrl = $this->extractImageFromAtomContent($entry);
+
             try {
-                $response = Http::timeout(10)->get('http://127.0.0.1:8000/tag', [
+                $article = Article::create([
+                    'title' => $title,
                     'summary' => $summary,
+                    'date' => $pubDate,
+                    'source' => $siteTitle,
+                    'source_url' => $source_url,
+                    'image_url' => $imageUrl,
                 ]);
 
-                if ($response->successful()) {
-                    return $response->body();
-                }
-            } catch (\Illuminate\Http\Client\ConnectionException $e) {
-                $attempt++;
-                if ($attempt > $maxRetries) {
-                    logger()->warning("Failed to tag summary: {$e->getMessage()}");
-
-                    return $default_tags;
-                }
-            }
-        }
-    }
-
-
-    function cleanHtml($html): false|string
-    {
-        $doc = new DOMDocument();
-        @$doc->loadHTML('<?xml encoding="UTF-8">' . $html);
-        $body = $doc->getElementsByTagName('body')->item(0);
-
-        foreach (iterator_to_array($body->childNodes) as $node) {
-            $text = $node->textContent;
-            if (stripos($text, "The post") !== false || stripos($text, "appeared first on") !== false) {
-                $body->removeChild($node);
+                $article->tags()->sync($tagIds);
+                $itemCount++;
+            } catch (\Exception $e) {
+                $skipCount++;
             }
         }
 
-        return $doc->saveHTML($body);
+        echo "📊 Atom Results: Added {$itemCount}, Skipped {$skipCount}\n";
     }
 
-    private function extractImage($item): ?string
+    private function extractAtomLink(\SimpleXMLElement $entry): string
     {
-        $namespaces = $item->getNameSpaces(true);
+        foreach ($entry->link as $link) {
+            $attributes = $link->attributes();
+            $rel = (string) ($attributes['rel'] ?? '');
+            $href = (string) ($attributes['href'] ?? '');
+            if ($rel === 'alternate' || $rel === '' || !isset($attributes['rel'])) return $href;
+        }
+        return isset($entry->link[0]) ? (string) $entry->link[0]->attributes()->href : '';
+    }
 
-        // 1. Check for media:thumbnail or media:content (BBC style)
+    private function extractImageFromAtomContent(\SimpleXMLElement $entry): ?string
+    {
+        if (isset($entry->content)) {
+            $content = (string) $entry->content;
+            if (preg_match('/<img[^>]+src="([^">]+)"/', $content, $matches)) {
+                $imageUrl = $matches[1];
+                if (!str_contains($imageUrl, 'counter.theconversation.com')) return $imageUrl;
+            }
+        }
+
+        $namespaces = $entry->getNamespaces(true);
         if (isset($namespaces['media'])) {
-            $media = $item->children($namespaces['media']);
-            if (isset($media->thumbnail)) {
-                $attrs = $media->thumbnail->attributes();
-                if (isset($attrs['url'])) {
-                    return (string) $attrs['url'];
-                }
-            }
-            if (isset($media->content)) {
-                $attrs = $media->content->attributes();
-                if (isset($attrs['url'])) {
-                    return (string) $attrs['url'];
-                }
-            }
-        }
-
-        // 2. Look inside description for an <img> tag (Nation & Nyasa)
-        if (isset($item->description)) {
-            $doc = new DOMDocument();
-            libxml_use_internal_errors(true);
-            $doc->loadHTML((string) $item->description);
-            libxml_clear_errors();
-
-            $imgTags = $doc->getElementsByTagName('img');
-            if ($imgTags->length > 0) {
-                return $imgTags->item(0)->getAttribute('src');
-            }
-        }
-
-        // 3. Check content:encoded for an <img> tag (Nyasa often uses this)
-        if (isset($namespaces['content'])) {
-            $content = $item->children($namespaces['content']);
-            if (isset($content->encoded)) {
-                $doc = new DOMDocument();
-                libxml_use_internal_errors(true);
-                $doc->loadHTML((string) $content->encoded);
-                libxml_clear_errors();
-
-                $imgTags = $doc->getElementsByTagName('img');
-                if ($imgTags->length > 0) {
-                    return $imgTags->item(0)->getAttribute('src');
+            $media = $entry->children($namespaces['media']);
+            foreach (['thumbnail', 'content'] as $key) {
+                if (isset($media->$key)) {
+                    $attrs = $media->$key->attributes();
+                    if (isset($attrs['url'])) return (string) $attrs['url'];
                 }
             }
         }
@@ -188,5 +264,122 @@ class ArticleService
         return null;
     }
 
+    private function extractCategoryFromConversationUrl(string $url): string
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        $parts = explode('/', trim($path, '/'));
+        foreach ($parts as $i => $part) {
+            if ($part === 'articles.atom' && $i > 0) {
+                return $this->conversationCategoryMap[$parts[$i-1]] ?? 'politics';
+            }
+        }
+        return 'politics';
+    }
 
+    private function summarizeArticle(string $source_url): ?string
+    {
+        if (str_contains($source_url, 'theconversation.com')) return null;
+
+        $maxRetries = 1; $attempt = 0;
+        while ($attempt <= $maxRetries) {
+            try {
+                $response = Http::timeout(10)->get('http://127.0.0.1:8000/summarize', ['article_url' => $source_url]);
+                if ($response->successful()) return $response->body();
+            } catch (\Exception $e) {
+                $attempt++;
+                if ($attempt > $maxRetries) return 'Failed to get summary';
+            }
+        }
+        return null;
+    }
+
+    private function tagArticle($summary)
+    {
+        if (empty($summary) || str_contains($summary, 'theconversation.com')) return json_encode(['General']);
+
+        $maxRetries = 1; $attempt = 0;
+        $default_tags = ['General'];
+        while ($attempt <= $maxRetries) {
+            try {
+                $response = Http::timeout(10)->get('http://127.0.0.1:8000/tag', ['summary' => $summary]);
+                if ($response->successful()) return $response->body();
+            } catch (\Exception $e) {
+                $attempt++;
+                if ($attempt > $maxRetries) return json_encode($default_tags);
+            }
+        }
+        return json_encode($default_tags);
+    }
+
+    private function normalizeTagsForWhereIn($tagsData): array
+    {
+        if (is_string($tagsData)) $decoded = json_decode($tagsData, true); else $decoded = $tagsData;
+        if (!is_array($decoded)) return [];
+
+        $flat = [];
+        foreach ($decoded as $item) {
+            if (is_string($item) || is_numeric($item)) { $flat[] = (string)$item; continue; }
+            if (is_array($item)) {
+                if (isset($item['name'])) { $flat[] = (string)$item['name']; continue; }
+                if (isset($item['tag'])) { $flat[] = (string)$item['tag']; continue; }
+                foreach ($item as $v) { if (is_string($v) || is_numeric($v)) $flat[] = (string)$v; }
+            }
+        }
+        $flat = array_filter(array_unique(array_map('trim', $flat)), fn($v)=>$v!=='');
+        return array_values($flat);
+    }
+
+    function cleanHtml($html): string
+    {
+        if (empty($html)) return '';
+        $doc = new DOMDocument();
+        @$doc->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        foreach (iterator_to_array($doc->getElementsByTagName('script')) as $s) $s->parentNode?->removeChild($s);
+        foreach (iterator_to_array($doc->getElementsByTagName('style')) as $s) $s->parentNode?->removeChild($s);
+        $body = $doc->getElementsByTagName('body')->item(0);
+        if ($body) {
+            foreach (iterator_to_array($body->childNodes) as $node) {
+                $text = $node->textContent;
+                if (stripos($text, "The post")!==false||stripos($text,"appeared first on")!==false||stripos($text,"Read more:")!==false){
+                    $node->parentNode?->removeChild($node);
+                }
+            }
+            $html = strip_tags($doc->saveHTML($body), '<p><a><strong><em><b><i><ul><ol><li><h1><h2><h3><h4><h5><h6><br>');
+            return trim($html);
+        }
+        return '';
+    }
+
+    private function extractImage($item): ?string
+    {
+        if (!($item instanceof \SimpleXMLElement)) return null;
+        if ($item->getName() === 'entry') return $this->extractImageFromAtomContent($item);
+
+        $namespaces = $item->getNameSpaces(true);
+        if (isset($namespaces['media'])) {
+            $media = $item->children($namespaces['media']);
+            foreach (['thumbnail','content'] as $key) {
+                if (isset($media->$key)) { $attrs = $media->$key->attributes(); if(isset($attrs['url'])) return (string)$attrs['url']; }
+            }
+        }
+
+        if (isset($item->description)) {
+            $doc = new DOMDocument(); libxml_use_internal_errors(true);
+            @$doc->loadHTML((string)$item->description); libxml_clear_errors();
+            $imgTags = $doc->getElementsByTagName('img');
+            if ($imgTags->length>0) return $imgTags->item(0)->getAttribute('src');
+        }
+
+        if (isset($namespaces['content'])) {
+            $content = $item->children($namespaces['content']);
+            if (isset($content->encoded)) {
+                $doc = new DOMDocument(); libxml_use_internal_errors(true);
+                @$doc->loadHTML((string)$content->encoded); libxml_clear_errors();
+                $imgTags = $doc->getElementsByTagName('img');
+                if ($imgTags->length>0) return $imgTags->item(0)->getAttribute('src');
+            }
+        }
+
+        return null;
+    }
 }

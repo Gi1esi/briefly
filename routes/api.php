@@ -14,8 +14,9 @@ Route::middleware('auth:sanctum')->post('/flags/toggle', [ArticleFlagController:
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user-facts', [UserFactController::class, 'list']); // List-only for API
     Route::post('/user-facts', [UserFactController::class, 'store']);
-    Route::put('/user-facts/{fact}', [UserFactController::class, 'update']);
-    Route::delete('/user-facts/{fact}', [UserFactController::class, 'destroy']);
+    Route::put('/user-facts/{userFact}', [UserFactController::class, 'update']);
+    Route::delete('/user-facts/{userFact}', [UserFactController::class, 'destroy']);
+
 });
 
 Route::get('/tags', [TagController::class, 'index']);

@@ -28,7 +28,6 @@ class ArticleController extends Controller
         return response()->json($articles);
 
 
-
     }
     /**
      * Show searchable articles.

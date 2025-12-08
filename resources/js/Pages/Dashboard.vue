@@ -20,6 +20,21 @@ const selectedTag = ref('')
 const page = ref(1)
 const pagination = ref({})
 
+const userFacts = ref(usePage().props.userFacts || [])
+
+async function getWhyCare(articleTitle) {
+    try {
+        const res = await axios.post("http://127.0.0.1:8000/why-care", {
+            article_title: articleTitle,
+            facts: userFacts.value
+        })
+        return res.data.reason
+    } catch (e) {
+        console.error("Why-care failed", e)
+        return null
+    }
+}
+
 function toggleTag(tagName) {
     selectedTag.value = selectedTag.value === tagName ? '' : tagName
     page.value = 1
@@ -153,6 +168,7 @@ async function toggleFlag(article, flagName) {
                     :onToggleLike="toggleLike"
                     :onToggleDislike="toggleDislike"
                     :onToggleFlag="toggleFlag"
+                    :getWhyCare="getWhyCare"
                 />
             </div>
 
@@ -187,6 +203,7 @@ async function toggleFlag(article, flagName) {
                         :onToggleLike="toggleLike"
                         :onToggleDislike="toggleDislike"
                         :onToggleFlag="toggleFlag"
+                        :getWhyCare="getWhyCare"
                     />
                 </div>
 

@@ -53,10 +53,10 @@ onMounted(() => {
 
                         <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                             <NavLink :href="route('dashboard')" :active="route().current('dashboard')">Home</NavLink>
-                            <NavLink href="/topics" :active="false">Topics</NavLink>
-                            <NavLink href="/read-later" :active="false">Read Later</NavLink>
+                            <NavLink :href="route('topics.topics')" :active="route().current('topics.topics')">Topics</NavLink>
+<!--                            <NavLink href="/read-later" :active="false">Read Later</NavLink>-->
                             <NavLink href="#" :active="false">Chats</NavLink>
-                            <NavLink href="/bookmarks" :active="false">Bookmarks</NavLink>
+                            <NavLink :href="route('articles.bookmarked')" :active="route().current('articles.bookmarked')">Bookmarks</NavLink>
                         </div>
                     </div>
 
@@ -120,7 +120,7 @@ onMounted(() => {
                 <div class="space-y-1 pb-3 pt-2">
                     <NavLink :href="route('dashboard')" :active="route().current('dashboard')">Home</NavLink>
                     <NavLink href="/topics" :active="false">Topics</NavLink>
-                    <NavLink href="/read-later" :active="false">Read Later</NavLink>
+<!--                    <NavLink href="/read-later" :active="false">Read Later</NavLink>-->
                     <NavLink href="#" :active="false">Chats</NavLink>
                     <NavLink href="/bookmarks" :active="false">Bookmarks</NavLink>
                 </div>

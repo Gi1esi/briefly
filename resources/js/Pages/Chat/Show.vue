@@ -1,8 +1,16 @@
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout.vue";
 import axios from 'axios';
-import { InformationCircleIcon, GlobeAltIcon,  ArrowUpRightIcon } from '@heroicons/vue/24/outline';
+import {
+    InformationCircleIcon,
+    GlobeAltIcon,
+    ArrowUpRightIcon,
+    ChatBubbleLeftRightIcon,
+    ChevronDownIcon,
+    SparklesIcon,
+    PaperAirplaneIcon
+} from '@heroicons/vue/24/outline';
 import { marked } from "marked";
 import { router } from '@inertiajs/vue3';
 
@@ -11,15 +19,45 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 const search = ref("");
 const newMessage = ref("");
 const useLiveSearch = ref(false);
+const messagesEnd = ref(null);
+const showScrollButton = ref(false);
+const textareaRef = ref(null);
 
+function scrollToBottom() {
+    nextTick(() => {
+        if (messagesEnd.value) {
+            messagesEnd.value.scrollIntoView({ behavior: 'smooth' });
+            showScrollButton.value = false;
+        }
+    });
+}
+
+function handleScroll(event) {
+    const container = event.target;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    showScrollButton.value = !isNearBottom;
+}
 
 function autoGrow(event) {
     const el = event.target
-    const minHeight = 50
+    const minHeight = 56 // Minimum height
+    const maxHeight = 200 // Maximum height
     el.style.height = 'auto'
-    el.style.height = Math.max(el.scrollHeight, minHeight) + 'px'
+    const newHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)
+    el.style.height = newHeight + 'px'
 }
 
+function adjustButtonPositions() {
+    nextTick(() => {
+        if (textareaRef.value) {
+            const textareaHeight = textareaRef.value.clientHeight
+            const buttons = document.querySelectorAll('.input-button')
+            buttons.forEach(button => {
+                button.style.bottom = Math.max(12, textareaHeight - 32) + 'px'
+            })
+        }
+    })
+}
 
 function renderMarkdown(text) {
     if (!text) return "";
@@ -28,18 +66,16 @@ function renderMarkdown(text) {
     });
 }
 
-
-
 function selectArticle(chat) {
     router.visit(`/chat/${chat.article.id}`);
 }
+
 const props = defineProps({
     article: Object,
     chats: Array,
     messages: Array,
     conversation: Object,
 })
-
 
 console.log("chats", props.chats);
 console.log("Messages", props.messages);
@@ -59,25 +95,39 @@ const filteredArticles = computed(() =>
 
 const selectedArticleMessages = computed(() => messages.value);
 
-// async function selectArticle(chat) {
-//     selectedArticle.value = chat.article;
-//
-//     const res = await axios.post('/chat/conversation', {
-//         article_id: chat.article.id
-//     });
-//
-//     conversationId.value = res.data.id;
-//
-//
-//     const msgsRes = await axios.get(`/conversation/${conversationId.value}/messages`);
-//     messages.value[chat.article.id] = msgsRes.data.map(m => ({
-//         id: m.id,
-//         text: m.message,
-//         from: m.sender === 'user' ? 'me' : 'them'
-//     }));
-//
-//     console.log('MSG',msgsRes)
-// }
+const groupedChats = computed(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const groups = {
+        'Today': [],
+        'Last 7 days': [],
+        'Last 30 days': [],
+        'Older': []
+    };
+
+    filteredArticles.value.forEach(chat => {
+        const chatDate = new Date(chat.last_message_at || chat.created_at);
+        const lastMessageDate = new Date(chat.last_message_at || chat.created_at);
+
+        // If last message is from today, put in Today group regardless of conversation start
+        if (lastMessageDate >= today) {
+            groups['Today'].push(chat);
+        } else if (chatDate >= sevenDaysAgo) {
+            groups['Last 7 days'].push(chat);
+        } else if (chatDate >= thirtyDaysAgo) {
+            groups['Last 30 days'].push(chat);
+        } else {
+            groups['Older'].push(chat);
+        }
+    });
+
+    return groups;
+});
 
 async function saveToDB(conversationId, sender, text) {
     if (!conversationId || !text) return null;
@@ -99,16 +149,28 @@ async function sendMessage() {
     if (!newMessage.value || !selectedArticle.value) return;
 
     const userText = newMessage.value;
-    const userMsg = { id: Date.now(),
+    const userMsg = {
+        id: Date.now(),
         message: userText,
         sender: "user",
         live: useLiveSearch.value
     };
 
     messages.value.push(userMsg);
+    nextTick(() => {
+        scrollToBottom();
+    });
 
     newMessage.value = "";
     useLiveSearch.value = false;
+
+    // Reset textarea height
+    nextTick(() => {
+        if (textareaRef.value) {
+            textareaRef.value.style.height = '56px'
+            adjustButtonPositions()
+        }
+    });
 
     // Save user message to DB
     const savedUser = await saveToDB(conversationId.value, "me", userText);
@@ -119,10 +181,8 @@ async function sendMessage() {
         }
     }
 
-
     try {
         let cleanContent = selectedArticle.value.content || selectedArticle.value.summary || "";
-
 
         if (cleanContent.includes('<') || cleanContent.includes('window.addEventListener')) {
             try {
@@ -134,7 +194,6 @@ async function sendMessage() {
                 const scripts = doc.querySelectorAll('script, style');
                 scripts.forEach(script => script.remove());
 
-
                 cleanContent = doc.body.textContent || doc.body.innerText || "";
 
                 // Clean up whitespace
@@ -143,7 +202,6 @@ async function sendMessage() {
                     .trim();
             } catch (e) {
                 console.error("Error parsing HTML:", e);
-
             }
         }
 
@@ -182,7 +240,9 @@ async function sendMessage() {
         };
 
         messages.value.push(aiMsg);
-
+        nextTick(() => {
+            scrollToBottom();
+        });
 
         // Save AI response to DB
         const savedAI = await saveToDB(conversationId.value, "them", aiText);
@@ -196,44 +256,67 @@ async function sendMessage() {
             message: `Error: ${err.response?.data?.detail || err.message || "Please try again"}`,
             sender: "ai"
         });
+        nextTick(() => {
+            scrollToBottom();
+        });
     }
 }
 
-
+onMounted(() => {
+    scrollToBottom();
+    adjustButtonPositions()
+});
 </script>
 
 <template>
     <AuthenticatedLayout>
-        <div class="flex h-screen bg-gray-50 dark:bg-neutral-darkBg px-14 pt-5">
+        <div class="flex h-screen bg-gray-50 dark:bg-neutral-darkBg">
             <!-- Sidebar -->
-            <aside class="w-60 border-r dark:border-r-gray-700 bg-white dark:bg-neutral-darkBg overflow-y-auto">
+            <aside class="w-60 border-r dark:border-r-gray-700 bg-white dark:bg-neutral-darkBg flex flex-col">
                 <div class="p-4 font-semibold text-brand-primary text-lg">Chats</div>
-                <div class="px-2">
+                <div class="px-4 pb-2">
                     <input
                         v-model="search"
                         type="text"
                         placeholder="Search Chats"
-                        class="w-full text-sm dark:text-gray-300 px-2 py-1 rounded-xl border dark:border-brand-primary/20 focus:outline-none focus:ring-2 focus:ring-brand-primary dark:focus:ring-brand-primary dark:bg-brand-primary/10"
+                        class="w-full text-sm dark:text-gray-300 px-3 py-2 rounded-xl border dark:border-brand-primary/20 focus:outline-none focus:ring-2 focus:ring-brand-primary dark:focus:ring-brand-primary dark:bg-brand-primary/10"
                     />
                 </div>
-                <div class="mt-4">
-                    <div
-                        v-for="chat in filteredArticles"
-                        :key="chat.id"
-                        @click="selectArticle(chat)"
-                        class="flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-brand-primary/10 transition-all group"
-                        :class="selectedArticle && selectedArticle.id === chat.id ? 'bg-gray-100' : ''"
-                    >
-                        <div class="flex-1 min-w-0 overflow-hidden">
-                            <div class="text-sm text-gray-400 truncate group-hover:text-gray-600 dark:group-hover:text-gray-400"
-                                 :title="chat.article?.title">
-                                {{ chat.article?.title }}
-                            </div>
-                        </div>
 
-<!--                        <div class="text-xs text-gray-400 flex-shrink-0 ml-2 group-hover:text-gray-500">-->
-<!--                            2:58pm-->
-<!--                        </div>-->
+                <!-- Chat List -->
+                <div class="flex-1 overflow-y-auto px-2 pb-4">
+                    <template v-for="(groupChats, groupName) in groupedChats" :key="groupName">
+                        <template v-if="groupChats.length > 0">
+                            <div class="px-4 py-2">
+                                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                                    {{ groupName }}
+                                </div>
+                                <div class="space-y-1">
+                                    <div
+                                        v-for="chat in groupChats"
+                                        :key="chat.id"
+                                        @click="selectArticle(chat)"
+                                        class="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-brand-primary/10 transition-all group"
+                                        :class="selectedArticle && selectedArticle.id === chat.article.id ? 'bg-gray-100 dark:bg-brand-primary/10' : ''"
+                                    >
+                                        <div class="flex-1 min-w-0 overflow-hidden">
+                                            <div class="text-sm text-gray-600 dark:text-gray-400 truncate group-hover:text-gray-800 dark:group-hover:text-gray-300"
+                                                 :title="chat.article?.title">
+                                                {{ chat.article?.title }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </template>
+
+                    <!-- Empty State -->
+                    <div v-if="filteredArticles.length === 0" class="px-4 py-8 text-center">
+                        <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-brand-primary/10 flex items-center justify-center">
+                            <ChatBubbleLeftRightIcon class="w-6 h-6 text-gray-400 dark:text-gray-500" />
+                        </div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">No conversations found</p>
                     </div>
                 </div>
             </aside>
@@ -242,93 +325,232 @@ async function sendMessage() {
             <main class="flex-1 flex flex-col">
                 <!-- Chat header -->
                 <div class="flex items-center gap-3 p-4 border-b dark:border-b-gray-700 bg-white dark:bg-neutral-darkBg">
-                    <div
-                        v-if="selectedArticle"
-                        class="font-semibold text-brand-primary text-base truncate"
-                        :title="selectedArticle.title"
-                    >
-                        {{ selectedArticle.title }}
+                    <div v-if="selectedArticle" class="flex-1 min-w-0">
+                        <div class="font-semibold text-brand-primary text-base truncate"
+                             :title="selectedArticle.title">
+                            {{ selectedArticle.title }}
+                        </div>
+                        <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            <SparklesIcon class="w-3.5 h-3.5" />
+                            <span>Chat with AI on this article</span>
+                        </div>
                     </div>
                     <div v-else class="text-gray-400">Select an article to chat</div>
                 </div>
 
-                <!-- Messages -->
-                <div class="flex-1 overflow-y-auto p-6 space-y-4 ">
-                    <div
-                        v-for="msg in messages"
-                        :key="msg.id"
-                        class="flex"
-                        :class="msg.sender === 'user' ? 'justify-end' : 'justify-center'"
-                    >
-                        <div
-                            :class="[
-            'px-4 py-2 rounded-2xl text-sm prose prose-sm',
-            msg.sender === 'user'
-                ? 'bg-brand-primary dark:bg-brand-primary/50  text-white prose-invert max-w-md'
-                : 'bg-white dark:bg-brand-primary/10 border dark:border-brand-primary/10 text-gray-900 dark:text-gray-400 max-w-2xl'
-        ]"
-                            v-html="renderMarkdown(msg.message)"
-                        ></div>
+                <!-- Messages Container -->
+                <div class="flex-1 overflow-y-auto p-6" @scroll="handleScroll">
+                    <div class="mx-auto" style="width: 42rem; max-width: 42rem;">
+                        <!-- Empty Conversation State -->
+                        <div v-if="messages.length === 0 && selectedArticle"
+                             class="flex flex-col items-center justify-center py-16">
+                            <div class="w-16 h-16 mb-4 rounded-full bg-gray-100 dark:bg-brand-primary/10 flex items-center justify-center">
+                                <ChatBubbleLeftRightIcon class="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                            </div>
+                            <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Start a conversation
+                            </h3>
+                            <p class="text-gray-500 dark:text-gray-400 text-center max-w-md mb-6">
+                                Ask questions about this article or request summaries. The AI will help you understand the content better.
+                            </p>
+                        </div>
+
+                        <!-- Messages -->
+                        <div class="space-y-4">
+                            <div
+                                v-for="msg in messages"
+                                :key="msg.id"
+                                class="flex"
+                                :class="msg.sender === 'user' ? 'justify-end' : 'justify-start'"
+                            >
+                                <div
+                                    :class="[
+                                        'px-4 py-3 rounded-2xl text-sm prose prose-sm',
+                                        msg.sender === 'user'
+                                            ? 'bg-brand-primary dark:bg-brand-primary/50 text-white prose-invert'
+                                            : 'bg-white dark:bg-brand-primary/10 border dark:border-brand-primary/10 text-gray-900 dark:text-gray-400'
+                                    ]"
+                                    :style="msg.sender === 'user' ? 'max-width: 28rem;' : 'max-width: 42rem;'"
+                                    v-html="renderMarkdown(msg.message)"
+                                ></div>
+                            </div>
+                        </div>
+
+                        <div ref="messagesEnd" />
                     </div>
 
-
+                    <!-- Scroll to Bottom Button -->
+                    <button
+                        v-if="showScrollButton"
+                        @click="scrollToBottom"
+                        class="fixed right-8 bottom-24 p-2 rounded-full bg-gray-800/80 dark:bg-gray-700/80 backdrop-blur-sm text-white shadow-lg hover:bg-gray-900/90 dark:hover:bg-gray-600/90 transition-all duration-200 z-10 border border-gray-700/20 dark:border-gray-600/20"
+                    >
+                        <ChevronDownIcon class="w-5 h-5" />
+                    </button>
                 </div>
 
                 <!-- Input -->
-                <div class="p-4  bg-white dark:bg-neutral-darkBg flex items-end gap-3 mb-8 justify-center">
-                    <div class="relative w-full max-w-2xl">
+                <div class="p-4 bg-white dark:bg-neutral-darkBg">
+                    <div class="mx-auto" style="width: 42rem; max-width: 42rem;">
+                        <div class="relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus-within:border-brand-primary/50 dark:focus-within:border-brand-primary/50 focus-within:ring-2 focus-within:ring-brand-primary/30 dark:focus-within:ring-brand-primary/50 transition-all duration-200 overflow-hidden">
+                            <!-- Textarea - occupies most of the space -->
+                            <textarea
+                                ref="textareaRef"
+                                v-model="newMessage"
+                                @input="autoGrow"
+                                @keydown.enter.exact.prevent="sendMessage"
+                                rows="1"
+                                placeholder="Type your message..."
+                                class="w-full resize-none px-4 py-3 text-sm bg-transparent text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-0 overflow-hidden min-h-[56px] max-h-[200px] pb-12"
+                                style="width: 42rem; max-width: 42rem;"
+                            ></textarea>
 
-                        <!-- Auto-growing textarea -->
-                        <textarea
-                            v-model="newMessage"
-                            @input="autoGrow"
-                            @keyup.enter="sendMessage"
-                            rows="3"
-                            placeholder="Write your message..."
-                            class="w-full resize-none px-4 py-2 text-sm rounded-xl border dark:border-brand-primary/20
-                            focus:outline-none focus:ring-1 focus:ring-brand-primary/10 overflow-hidden dark:bg-brand-primary/10 dark:text-gray-300"
-                        ></textarea>
+                            <div class="absolute bottom-0 left-0 right-0 px-4 py-2 bg-gradient-to-t from-white/80 to-transparent dark:from-gray-900/80 dark:to-transparent backdrop-blur-sm">
+                                <div class="flex items-center justify-between">
+                                    <button
+                                        @click="useLiveSearch = !useLiveSearch"
+                                        class="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-colors"
+                                        :class="useLiveSearch
+                            ? 'bg-brand-primary/10 dark:bg-brand-primary/20 text-brand-primary dark:text-brand-primary/90 border border-brand-primary/20 dark:border-brand-primary/30'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'"
+                                    >
+                                        <GlobeAltIcon class="w-4 h-4" />
+                                        <span class="text-xs font-medium select-none">
+                            {{ useLiveSearch ? 'Live' : 'Web' }}
+                        </span>
+                                    </button>
 
-                        <!-- Live search toggle -->
-                        <button
-                            @click="useLiveSearch = !useLiveSearch"
-                            class="absolute left-4 bottom-4 flex items-center gap-1 px-2 py-1 rounded
-                            hover:bg-gray-100 bg-brand-primary/10 dark:bg-brand-primary/20"
-                        >
-                            <GlobeAltIcon class="w-5 h-5" :class="useLiveSearch ? 'text-brand-primary' : 'text-gray-400'" />
-                            <span class="text-xs font-medium select-none" :class="useLiveSearch ? 'text-brand-primary ' : 'text-gray-700 dark:text-gray-400'">Live Search</span>
-                        </button>
+                                    <button
+                                        @click="sendMessage"
+                                        :disabled="!newMessage.trim().length"
+                                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors"
+                                        :class="newMessage.trim().length
+                            ? 'bg-brand-secondary text-white hover:bg-brand-secondary/90 shadow-sm'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'"
+                                    >
+                                        <span class="text-xs font-medium">Send</span>
+                                        <PaperAirplaneIcon class="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
 
-                        <!-- Send -->
-                        <button
-                            @click="sendMessage"
-                            :disabled="!newMessage.trim().length"
-                            class="absolute right-4 bottom-4 px-3 py-1.5 text-sm rounded"
-                            :class="newMessage.trim().length
-                            ? 'bg-brand-secondary text-white'
-                            : 'bg-brand-secondary/30 text-gray-50 cursor-not-allowed'"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
-                            </svg>
-
-
-                        </button>
-
+                        <!-- Live search indicator -->
+                        <div v-if="useLiveSearch" class="flex items-center gap-1.5 mt-2 justify-end">
+                            <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                            <span class="text-xs text-green-600 dark:text-green-400 font-medium">
+                Live search is active
+            </span>
+                        </div>
                     </div>
                 </div>
-
             </main>
         </div>
     </AuthenticatedLayout>
 </template>
-
-
 
 <style scoped>
 .truncate {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Custom scrollbar for sidebar */
+aside > div:last-child::-webkit-scrollbar {
+    width: 4px;
+}
+
+aside > div:last-child::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+aside > div:last-child::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 2px;
+}
+
+.dark aside > div:last-child::-webkit-scrollbar-thumb {
+    background: #4b5563;
+}
+
+/* Main chat area scrollbar - ChatGPT/DeepSeek style */
+main > div:first-of-type::-webkit-scrollbar {
+    width: 8px;
+}
+
+main > div:first-of-type::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 4px 0;
+}
+
+main > div:first-of-type::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.3);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+main > div:first-of-type::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.5);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.dark main > div:first-of-type::-webkit-scrollbar-thumb {
+    background: rgba(75, 85, 99, 0.4);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.dark main > div:first-of-type::-webkit-scrollbar-thumb:hover {
+    background: rgba(75, 85, 99, 0.6);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+/* FireFox support */
+main > div:first-of-type {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+.dark main > div:first-of-type {
+    scrollbar-color: rgba(75, 85, 99, 0.4) transparent;
+}
+
+/* Textarea styling */
+textarea {
+    line-height: 1.5;
+    padding-top: 16px;
+    padding-bottom: 16px;
+}
+
+textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+textarea::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+textarea::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.3);
+    border-radius: 3px;
+}
+textarea {
+    transition: height 0.2s ease-out;
+}
+
+
+.pb-12 {
+    padding-bottom: 3rem;
+}
+
+.backdrop-blur-sm {
+    backdrop-filter: blur(2px);
 }
 </style>
